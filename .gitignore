@@ -1,0 +1,4 @@
+.env
+*.pyc
+order_history.txt
+last_execution.json
