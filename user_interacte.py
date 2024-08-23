@@ -19,7 +19,7 @@ LNM_OPTIONS = {
     'passphrase': LNM_PASSPHRASE
 }
 
-
+lnm = rest.LNMarketsRest(**LNM_OPTIONS)
 
 def user_interaction(close_orders, update_orders, create_orders, active_positions, open_positions, cancel_orders, auto_validate=False):
     print("\nRecommandations d'actions :")
