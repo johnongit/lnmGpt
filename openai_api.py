@@ -8,7 +8,7 @@ from tokencost import calculate_prompt_cost, calculate_completion_cost
 
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
-model = "gpt-4o-mini"
+model = "chatgpt-4o-latest"
 
 '''client = OpenAI(
     base_url = 'http://localhost:11434/v1',
@@ -353,9 +353,9 @@ Analyze the provided data using the tree of thought approach with multiple exper
 
 def analyze_price_action_oai(data_history_short, data_history, data_history_long, technical_data_short, technical_data, technical_data_long):
     message = f'''
-    Tu es un analyste boursier professionnel spécialisé dans le bitcoin et l'analyse de price action. Ta tâche est d'analyser en profondeur les données de prix du bitcoin, ainsi que les indicateurs techniques RSI et MACD, pour fournir une analyse détaillée à court, moyen et long terme.
+    You are a professional stock market analyst specializing in bitcoin and price action analysis. Your task is to thoroughly analyze bitcoin price data, as well as the RSI and MACD technical indicators, to provide a detailed analysis for short, medium, and long term.
 
-Données d'entrée pour ton analyse :
+Input data for your analysis:
 
 <history_price_short>
 {data_history_short}
@@ -381,34 +381,37 @@ Données d'entrée pour ton analyse :
 {technical_data_long}
 </technical_data_long>
 
-Pour chaque horizon temporel (court, moyen et long terme), analyse et fournis les informations suivantes :
+For each time horizon (short, medium, and long term), analyze and provide the following information:
 
-1. Niveaux de résistance et de support clés
-2. Tendance actuelle et force de la tendance
-3. Configuration du marché (range, tendance haussière, tendance baissière, etc.)
-4. Modèles de chandeliers japonais significatifs
-5. Divergences potentielles entre le prix et les indicateurs techniques (RSI, MACD)
-6. Volumes et leur interprétation
-7. Momentum du marché
-8. Niveaux de Fibonacci pertinents
-9. Anticipation des mouvements futurs potentiels
+    Key resistance and support levels
+    Current trend and trend strength
+    Market configuration (range, bullish trend, bearish trend, etc.)
+    Significant Japanese candlestick patterns
+    Potential divergences between price and technical indicators (RSI, MACD)
+    Volumes and their interpretation
+    Market momentum
+    Relevant Fibonacci levels
+    Anticipation of potential future movements
 
-Procédure d'analyse pour chaque horizon temporel :
+Analysis procedure for each time horizon:
 
-1. Examine attentivement les données historiques et techniques.
-2. Identifie les niveaux de support et de résistance clés en observant les points de retournement importants.
-3. Détermine la tendance actuelle et sa force en analysant la direction des prix et les indicateurs techniques.
-4. Évalue la configuration du marché en considérant la tendance et les mouvements de prix récents.
-5. Repère les modèles de chandeliers japonais significatifs et leur implication.
-6. Cherche des divergences entre le prix et les indicateurs techniques.
-7. Analyse les volumes et leur impact sur les mouvements de prix.
-8. Évalue le momentum du marché à l'aide des indicateurs et des mouvements de prix.
-9. Identifie les niveaux de Fibonacci pertinents pour les retracements et les extensions.
-10. Formule des anticipations sur les mouvements futurs potentiels basées sur l'ensemble de l'analyse.
+    Carefully examine historical and technical data.
+    Identify key support and resistance levels by observing important turning points.
+    Determine the current trend and its strength by analyzing price direction and technical indicators.
+    Assess the market configuration considering the trend and recent price movements.
+    Spot significant Japanese candlestick patterns and their implications.
+    Look for divergences between price and technical indicators.
+    Analyze volumes and their impact on price movements.
+    Evaluate market momentum using indicators and price movements.
+    Identify relevant Fibonacci levels for retracements and extensions.
+    Formulate anticipations of potential future movements based on the overall analysis.
 
-Présente ton analyse technique complète entre les balises <technical_analysis> et </technical_analysis>. Structure ton analyse en trois sections distinctes : court terme, moyen terme et long terme. Pour chaque section, fournis les informations demandées de manière claire, concise et argumentée.
+Present your complete technical analysis between the tags <technical_analysis> and </technical_analysis>. Structure your analysis into three distinct sections: short term, medium term, and long term. For each section, provide the requested information in a clear, concise, and reasoned manner.
 
-Conclus ton analyse par une synthèse globale et des recommandations stratégiques pour les traders et investisseurs.
+Conclude your analysis with an overall summary and strategic recommendations for traders and investors.
+
+Added directive to reduce hallucinations:
+To reduce hallucinations, do not invent or provide any metrics or specific numerical values if you are not certain you can determine them with certainty based on the given data. If you are unsure about a specific metric or value, state that it cannot be determined with the available information.
     '''
     
     technical_analysis = get_response(message).choices[0].message.content
