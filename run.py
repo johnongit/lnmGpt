@@ -76,27 +76,37 @@ def calculate_price_change(last_price, current_price):
 
 def should_execute():
     print("\nDétermination si le script principal doit être exécuté...")
-    
     last_exec = load_last_execution()
-    
     if last_exec is None:
         print("Première exécution détectée. Le script principal sera exécuté.")
+        t = time.time()
+        t = datetime.fromtimestamp(t)
+        t = t - timedelta(hours=10)
+        t = datetime.timestamp(t)
+        t = datetime.fromtimestamp(t)
+        btc_data = get_bitcoin_data(t)
+        print(f'''btc_data {btc_data}''')
+        current_price = btc_data['Close'].iloc[-1]
         save_last_execution(current_price, current_price, current_price)
         return True
-
+    
+    
+    
     last_timestamp = datetime.fromtimestamp(last_exec["timestamp"])
+    last_timestamp = datetime.fromtimestamp()
+    btc_data = get_bitcoin_data(last_timestamp)
+    current_price = btc_data['Close'].iloc[-1]
+    high_price = btc_data['High'].max()
+    low_price = btc_data['Low'].min()
 
     
-    btc_data = get_bitcoin_data(last_timestamp)
+    
     #btc_data = get_bitcoin_data(last_timestamp - timedelta(days=50))
     if btc_data.empty:
         print("Aucune donnée Bitcoin disponible pour la période spécifiée.")
         exit(1)
         
-    
-    current_price = btc_data['Close'].iloc[-1]
-    high_price = btc_data['High'].max()
-    low_price = btc_data['Low'].min()
+
 
     print(f"Prix actuel: {current_price:.2f}")
     print(f"Prix le plus haut depuis la dernière exécution: {high_price:.2f}")
