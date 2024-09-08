@@ -93,7 +93,7 @@ def should_execute():
     
     
     last_timestamp = datetime.fromtimestamp(last_exec["timestamp"])
-    last_timestamp = datetime.fromtimestamp()
+    
     btc_data = get_bitcoin_data(last_timestamp)
     current_price = btc_data['Close'].iloc[-1]
     high_price = btc_data['High'].max()

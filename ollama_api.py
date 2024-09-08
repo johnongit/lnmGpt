@@ -14,7 +14,7 @@ client = OpenAI(
     base_url = 'http://localhost:11434/v1',
     api_key='ollama', # required, but unused
 )
-model='llama3:70b-instruct-q2_K'
+model='llama3-gradient'
 
 
 def read_template_from_file(file_path):
@@ -189,7 +189,7 @@ For each time horizon (short, medium, and long term), analyze and provide the fo
     Market configuration (range, bullish trend, bearish trend, etc.)
     Significant Japanese candlestick patterns
     Potential divergences between price and technical indicators (RSI, MACD)
-    Volumes and their interpretation
+    Volumes and their interpretation, including identification of low volume cycles
     Market momentum
     Relevant Fibonacci levels
     Anticipation of potential future movements
@@ -202,7 +202,7 @@ Analysis procedure for each time horizon:
     Assess the market configuration considering the trend and recent price movements.
     Spot significant Japanese candlestick patterns and their implications.
     Look for divergences between price and technical indicators.
-    Analyze volumes and their impact on price movements.
+    Analyze volumes and their impact on price movements, paying special attention to identifying low volume cycles and their significance.
     Evaluate market momentum using indicators and price movements.
     Identify relevant Fibonacci levels for retracements and extensions.
     Formulate anticipations of potential future movements based on the overall analysis.

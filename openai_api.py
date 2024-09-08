@@ -10,12 +10,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 model = "chatgpt-4o-latest"
 
-'''client = OpenAI(
-    base_url = 'http://localhost:11434/v1',
-    api_key='ollama', # required, but unused
-)
-model='mistral-nemo'
-'''
+# ... code commenté pour la configuration alternative ...
 
 def read_template_from_file(file_path):
     """Lit le contenu du fichier template."""
@@ -151,205 +146,6 @@ def analysGptV2(data, user_balance, whitelist, technical_data,past_data, active_
     completion_cost = calculate_completion_cost(data, model)
     return data, prompt_cost, completion_cost
 
-def analysGpt(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
-    
-    message = f'''
-You are an AI trading system for the lnmarkets platform, composed of multiple expert agents collaborating to analyze market data and create trading recommendations. Your experts include:
-
-1. Technical Analyst
-2. Fundamental Analyst
-3. Risk Manager
-4. Portfolio Manager
-5. Order Execution Specialist
-
-Each expert will analyze the data from their perspective and contribute to the final recommendations. The Portfolio Manager will oversee the process and ensure a balanced approach to risk management across short, medium, and long-term orders.
-
-Input data:
-User usable balance
-<user_balance>
-{user_balance}
-</user_balance>
-
-Current Running (and filled) orders (that can be closed)
-<running_orders>
-{active_positions}
-</running_orders>
-
-Current opened and not running (currently waited to be filled) orders (that can be canceled)
-<open_orders>
-{open_positions}
-</open_orders>
-
-Orders of running and opened orders performed by agents (contains reason)
-<active_orders_list>
-{data}
-</active_orders_list>
-
-Orders not to be touched
-<whitelist>
-{whitelist}
-</whitelist>
-
-Technical analysis
-<technical_data>
-{technical_data}
-</technical_data>
-
-Previons actions analysis
-<past_data>
-{past_data}
-</past_data>
-
-Imagine that five Bitcoin market analysis experts are answering this question. Each expert represents a specific role:
-
-1- Technical Analyst :
-    Analyze price trends, support/resistance levels, and technical indicators (RSI, MACD)
-    Identify potential entry and exit points
-    When defining take profit and stop loss, take care on fakeout
-    add reason in and especially resistance, take profit, stop loss, target prices
-    Analyze current market volatility
-
-2- Order Analyst :
-    Review past order analysis data
-    Review each running and open order, take into account reason and "time_horizon"
-    For open orders, if "time_horizon" was not provided, check target price against resistance and support to determine time horizon.
-    Time horizon must be taken into account before suggesting cancellation.
-    Ensures that past successes and failures are taken into account
-    Clearly distinguish between open orders and running orders
-    When discussing orders, always specify whether they are open or running, and explain the implications for execution and risk management
-    Check reason and time horizon before update, cancel and close
-    add term (short, middle, long)
-
-3- Risk Manager :
-    Determine appropriate leverage and position sizes
-    Suggest stop-loss and take-profit levels
-    Evaluate overall portfolio risk
-    Balance risk across short, medium, and long-term positions
-    Ensure compliance with risk-reward ratio (> 1.7)
-
-4- Portfolio Manager :
-    Review existing orders and positions
-    Suggest order modifications or closures based on current market conditions
-    Ensure compliance with risk-reward ratio (> 1.7)
-
-
-
-Process:
-
-    Each expert will write a step of their thought process, then share it with the group.
-    After each share, all experts will move on to the next step.
-    If an expert realizes they are going down the wrong path at any point, they will withdraw from the process.
-    The process will continue until all experts have completed their analysis or withdrawn.
-
-Final objective:
-Based on the collaborative analysis, provide recommendations for:
-
-    Orders to close (for running orders)
-    Orders to cancel (for open orders)
-    New orders to create
-    Existing orders to update
-    Existing orders to cancel
-
-Begin with the first step of thinking for each expert, focusing on their specific area of expertise.
-
-
-Your recommendations should be provided in JSON format, with separate arrays for each action type. Use the following structure for your output:
-
-<order_to_close>
-[
-  {{
-    "id": "string",
-    "entry_price": float,
-    "margin": integer,
-    "side": "string",
-    "reason": "string"
-  }},
-  ...
-]
-</order_to_close>
-
-<order_to_cancel>
-[
-  {{
-    "id": "string",
-    "entry_price": float,
-    "side": "string",
-    "margin": integer,
-    "reason": "string"
-  }},
-  ...
-]
-</order_to_cancel>
-
-
-<order_to_create>
-[
-  {{
-    "type": "l" or "m",
-    "side": "b" or "s",
-    "margin": integer,
-    "leverage": integer, (2 to 10)
-    "takeprofit": integer (optional),
-    "stoploss": integer (optional),
-    "price": integer (required for type "l", use "N/A" for type "m"),
-    "reason": "Explanation",
-    "time_horizon": "short", "medium", or "long"
-  }},
-  ...
-]
-</order_to_create>
-
-<order_to_update>
-[
-  {{
-    "id": "string",
-    "type": "takeprofit" or "stoploss",
-    "value": float,
-    "side": "string",
-    "margin": integer,
-    "entry_price": float,
-    "reason": "Explanation"
-  }},
-  ...
-]
-</order_to_update>
-
-Follow these guidelines when creating your recommendations:
-
-1. Incorporate insights from all expert analyses. Insert all analyses between <expert></experts>
-2. Ensure a balanced risk profile across short, medium, and long-term positions.
-3. Consider the user's available balance and existing orders.
-4. For order creation:
-   - Use 'm' for market orders (set price to "N/A") and 'l' for limit orders.
-   - Use 'b' for buy orders and 's' for sell orders.
-   - Provide only the margin, not the quantity.
-   - Include a reason for each order.
-   - Specify the time horizon for each order (short, medium, or long).
-5. For order updates:
-   - Specify whether you're updating the takeprofit or stoploss.
-   - Include a reason in for each update.
-   - If the value is a round number (i.e., has no decimal places), represent it as an integer without a decimal point. If it has decimal places, use a float.
-6. For order closure: reserved for running_orders order
-7. For order cancellation: reserved for open_orders
-8. Ensure that your recommendations do not include any orders from the <whitelist></whitelist>.
-9. Consider past order performance (success and failures) when making new recommendations.
-10. Maintain a risk-reward ratio of more than 1.7 for all positions.
-11. Place stop losses at a safe distance from support/resistance levels to avoid false triggers while still protecting the position.
-12. Balance the portfolio risk by adjusting position sizes and leverages across different time horizons.
-
-Analyze the provided data using the tree of thought approach with multiple experts, and create your recommendations following the guidelines and format described above. Ensure that your output is properly formatted JSON within the specified XML tags.
-
-'''
-    print(f'''prompt analyse finale: \n {message}''')
-
-    data = get_response(message).choices[0].message.content
-    
-    print(f'''Analyse finale: {data}''' )
-    prompt_cost = calculate_prompt_cost(message, model)
-    completion_cost = calculate_completion_cost(data, model)
-    print(prompt_cost, completion_cost)
-    return data, prompt_cost, completion_cost
-
 
 def analyze_price_action_oai(data_history_short, data_history, data_history_long, technical_data_short, technical_data, technical_data_long):
     message = f'''
@@ -388,7 +184,7 @@ For each time horizon (short, medium, and long term), analyze and provide the fo
     Market configuration (range, bullish trend, bearish trend, etc.)
     Significant Japanese candlestick patterns
     Potential divergences between price and technical indicators (RSI, MACD)
-    Volumes and their interpretation
+    Volumes and their interpretation, including identification of low volume cycles
     Market momentum
     Relevant Fibonacci levels
     Anticipation of potential future movements
@@ -401,7 +197,7 @@ Analysis procedure for each time horizon:
     Assess the market configuration considering the trend and recent price movements.
     Spot significant Japanese candlestick patterns and their implications.
     Look for divergences between price and technical indicators.
-    Analyze volumes and their impact on price movements.
+    Analyze volumes and their impact on price movements, paying special attention to identifying low volume cycles and their significance.
     Evaluate market momentum using indicators and price movements.
     Identify relevant Fibonacci levels for retracements and extensions.
     Formulate anticipations of potential future movements based on the overall analysis.

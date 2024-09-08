@@ -9,15 +9,16 @@ from lnmarkets import rest
 
 from parse import parse_analysis_result, filter_order_history, parse_technical_analys, parse_past_data_analys, parse_new_prompt_template
 from user_interacte import user_interaction
-from anthropic_api import analyze_price_action, analys_past_data, analysClaudeV3, analysClaudeV4, customize_final_prompt
-from openai_api import analyze_price_action_oai, analys_past_data_aoi, analysGpt, analysGptV2, customize_final_prompt_gpt
+from anthropic_api import analyze_price_action, analys_past_data, analysClaudeV4, customize_final_prompt
+from openai_api import analyze_price_action_oai, analys_past_data_aoi, analysGptV2, customize_final_prompt_gpt
 from ollama_api import analys_past_data_ollama, analysOllamaV2, analyze_price_action_ollama, customize_final_prompt_ollama
 from yahoo_finance_api import YahooFinanceTool
-from history import update_history, find_not_closed_orders, read_order_history, find_closed_orders
+from history import update_history, find_not_closed_orders, read_order_history, find_closed_orders, update_pl_from_active_positions
 
 # Add this near the top of the file
 auto_validate = "--auto-validate" in sys.argv
 use_oai = "oai" in sys.argv
+use_claude = "claude" in sys.argv
 use_ollama = "ollama" in sys.argv
 
 # Load environment variables
@@ -42,6 +43,7 @@ def read_whitelist(filename='whitelist.txt'):
     with open(filename, 'r') as file:
         return [line.strip() for line in file if line.strip()]
 
+
 def format_position(position):
     return {
         "id": position.get('id', 'N/A'),
@@ -55,9 +57,7 @@ def format_position(position):
     }
 
 def main():
-    # Check if OpenAI should be used
-    
-    print("Using OpenAI" if use_oai else "Using Ollama" if use_ollama else "Using Claude")
+    print("Utilisation de OpenAI" if use_oai else "Utilisation de Ollama" if use_ollama else "Utilisation de Claude")
 
     try:
         # Test connection
@@ -90,6 +90,7 @@ def main():
 
         active_positions = json.loads(active_positions_raw)
         active_positions = [position for position in active_positions if position['id'] not in whitelist]
+
         
         closed_positions = json.loads(closed_positions_raw)
         open_positions = json.loads(open_positions_raw)
@@ -107,13 +108,15 @@ def main():
 
         active_positions_ids = "\n".join([p['id'] for p in formatted_output["active_positions"]["positions"]])
         open_positions_ids = "\n".join([p['id'] for p in formatted_output["open_positions"]["positions"]])
-
+        print(formatted_output["active_positions"]["positions"])
+        
         # Update history
         update_history(formatted_output=formatted_output, history_filename="order_history.txt")
         
         history = read_order_history()
         history = filter_order_history(history, selected_types=["closed", "created"])
         orders_not_closed = find_not_closed_orders(history)
+        orders_not_closed = update_pl_from_active_positions(orders_not_closed, active_positions)
         orders_closed = find_closed_orders(history)
 
         # Analyze price action
@@ -133,13 +136,22 @@ def main():
         price_data = parse_technical_analys(price_data)
         
         # Analyze past data
-        history_data, p_cost, c_cost= analys_past_data_aoi(orders_closed) if use_oai else analys_past_data_ollama(orders_closed) if use_ollama else analys_past_data(orders_closed)
+        history_data, p_cost, c_cost = (
+            analys_past_data_aoi(orders_closed) if use_oai
+            else analys_past_data_ollama(orders_closed) if use_ollama
+            else analys_past_data(orders_closed)
+        )
         prompt_cost += p_cost
         completion_cost += c_cost
         history_data = parse_past_data_analys(history_data)
 
         # Customize prompt
-        customize_prompt_func = customize_final_prompt_gpt if use_oai else customize_final_prompt_ollama if use_ollama else customize_final_prompt
+        print("customize_prompt_func")
+        customize_prompt_func = (
+            customize_final_prompt_gpt if use_oai
+            else customize_final_prompt_ollama if use_ollama
+            else customize_final_prompt
+        )
         
         new_prompt_template, p_cost, c_cost = customize_prompt_func(
             past_data=history_data
@@ -166,12 +178,12 @@ def main():
         prompt_cost += p_cost
         completion_cost += c_cost
         close_orders, update_orders, create_orders, cancel_orders = parse_analysis_result(analysis_result)
-        print(f'Total prompt cost: {prompt_cost}')
-        print(f'Total completion cost: {completion_cost}')
+        print(f'Coût total du prompt : {prompt_cost}')
+        print(f'Coût total de complétion : {completion_cost}')
         user_interaction(close_orders, update_orders, create_orders, active_positions_ids, open_positions_ids, cancel_orders, auto_validate)
 
     except Exception as e:
-        print("Error occurred during execution:", str(e))
+        print("Une erreur s'est produite pendant l'exécution:", str(e))
         traceback.print_exc()
 
 if __name__ == "__main__":

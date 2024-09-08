@@ -92,12 +92,11 @@ def update_history(formatted_output, history_filename):
     #history = read_history_file(history_filename)
     history = read_order_history(200)
     
-    # Identifier les ordres non fermés dans l'historique
-    print("====================")
     
     #open_orders = identify_open_orders(history)
     history = filter_order_history(history)
     identify_missing_closed_orders(formatted_output=formatted_output,history=history)
+    
     
     
 def find_not_closed_orders_old(orders):
@@ -120,6 +119,7 @@ def find_not_closed_orders_old(orders):
 
 
 def find_not_closed_orders(orders):
+    
     order_dict = {}
 
     # Premier parcours : stocker les états de chaque ordre
@@ -148,6 +148,7 @@ def find_not_closed_orders(orders):
     active_orders.sort(key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
     
     active_orders = format_json(active_orders)
+    
     return active_orders
 
 
@@ -206,7 +207,7 @@ def format_json(data):
             "takeprofit": item.get("data", {}).get("takeprofit", ""),
             "open": item.get("data", {}).get("open", ""),
             "time_horizon": item.get("data", {}).get("time_horizon", ""),
-            "reason": item.get("reason", "")
+            "reason": item.get("data", {}).get("reason", ""),
         }
         formatted_data.append(formatted_item)
     
@@ -216,3 +217,12 @@ def format_json(data):
     #print(formatted_json)
     
     return formatted_json
+
+def update_pl_from_active_positions(not_closed_orders, active_positions):
+    active_positions_dict = {pos['id']: pos['pl'] for pos in active_positions}
+    
+    updated_orders = json.loads(not_closed_orders)
+    for order in updated_orders:
+        order['pl'] = active_positions_dict.get(order['id'], order.get('pl', 0))
+    
+    return json.dumps(updated_orders, indent=2)
