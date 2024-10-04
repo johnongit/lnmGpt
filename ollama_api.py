@@ -5,10 +5,10 @@ load_dotenv()
 import json
 import re
 from tokencost import calculate_prompt_cost, calculate_completion_cost
+import colorama
+from colorama import Fore, Back, Style
 
-
-
-
+colorama.init(autoreset=True)
 
 client = OpenAI(
     base_url = 'http://localhost:11434/v1',
@@ -35,6 +35,7 @@ def safe_format(template, **kwargs):
 
 
 def get_response(text):
+    print(f"{Fore.YELLOW}Prompt envoyé :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{text}{Style.RESET_ALL}\n")
     response = client.chat.completions.create(
     model=model,
     messages=[
@@ -56,6 +57,7 @@ def get_response(text):
         "type": "text"
     }
     )
+    print(f"{Fore.GREEN}Réponse reçue :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{response.choices[0].message.content}{Style.RESET_ALL}\n")
     return response
 
 
@@ -102,10 +104,12 @@ Your entire response should be enclosed within <past_data_analys> tags. Do not i
 Remember, your goal is to provide a precise and insightful analysis of the successes and failures in the past Bitcoin trading data. Focus on delivering actionable insights that could be used to improve future trading strategies in the cryptocurrency market.
 
     '''
+    print(f"{Fore.YELLOW}Analyse des données passées - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
     past_data_analys = get_response(message).choices[0].message.content
+    print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{past_data_analys}{Style.RESET_ALL}\n")
     prompt_cost = 0
     completion_cost = 0
-    print(prompt_cost, completion_cost)
+    print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
 
 
@@ -123,8 +127,9 @@ The new prompt should remain in English and be placed inside <new_prompt_templat
 {prompt_template}
 </template
 '''
+    print(f"{Fore.YELLOW}Personnalisation du prompt final - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
     data = get_response(message).choices[0].message.content
-    print(data)
+    print(f"{Fore.GREEN}Nouveau prompt :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{data}{Style.RESET_ALL}\n")
     prompt_cost = 0
     completion_cost = 0
     return data, prompt_cost, completion_cost
@@ -143,10 +148,9 @@ def analysOllamaV2(data, user_balance, whitelist, technical_data,past_data, acti
     }
     message = safe_format(prompt_template, **variables)
     
-    print(f'''prompt analyse finale: \n {message}''')
-    print("==============================")
+    print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
     data = get_response(message).choices[0].message.content
-    print(f'''Analyse finale: {data}''' )
+    print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{data}{Style.RESET_ALL}\n")
     prompt_cost = 0
     completion_cost = 0
     return data, prompt_cost, completion_cost
@@ -220,5 +224,5 @@ To reduce hallucinations, do not invent or provide any metrics or specific numer
     prompt_cost = 0
     completion_cost = 0
     
-    print(prompt_cost, completion_cost)
+    print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
     return technical_analysis, prompt_cost, completion_cost

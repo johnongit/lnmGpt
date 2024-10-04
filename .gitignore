@@ -2,3 +2,5 @@
 *.pyc
 order_history.txt
 last_execution.json
+logs/*
+logs

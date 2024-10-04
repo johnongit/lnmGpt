@@ -14,6 +14,10 @@ from openai_api import analyze_price_action_oai, analys_past_data_aoi, analysGpt
 from ollama_api import analys_past_data_ollama, analysOllamaV2, analyze_price_action_ollama, customize_final_prompt_ollama
 from yahoo_finance_api import YahooFinanceTool
 from history import update_history, find_not_closed_orders, read_order_history, find_closed_orders, update_pl_from_active_positions
+from structured_logger import StructuredLogger
+import pandas as pd
+
+import logging
 
 # Add this near the top of the file
 auto_validate = "--auto-validate" in sys.argv
@@ -38,6 +42,7 @@ LNM_OPTIONS = {
 # Initialize clients
 lnm = rest.LNMarketsRest(**LNM_OPTIONS)
 yahoofi = YahooFinanceTool()
+logger = StructuredLogger()
 
 def read_whitelist(filename='whitelist.txt'):
     with open(filename, 'r') as file:
@@ -56,8 +61,13 @@ def format_position(position):
         "liquidation_price": position.get('liquidation', 'N/A')
     }
 
+def log_info(message):
+    logging.info(message)
+
 def main():
+    logger.log("execution_start", {"message": "Début de l'exécution de script-lnmAuto.py"})
     print("Utilisation de OpenAI" if use_oai else "Utilisation de Ollama" if use_ollama else "Utilisation de Claude")
+    log_info(f"Utilisation de {'OpenAI' if use_oai else 'Ollama' if use_ollama else 'Claude'}")
 
     try:
         # Test connection
@@ -72,6 +82,8 @@ def main():
         print(f'Balance: {user_balance}')
 
         tickeryf = yf.Ticker("BTC-USD")
+        pd.set_option('display.max_rows', None)
+
         data_history_short = tickeryf.history(interval="1h", period="10d")
         data_history = tickeryf.history(interval="1d", period="1mo")
         data_history_long = tickeryf.history(interval="1d", period="6mo")
@@ -79,6 +91,7 @@ def main():
         technical_data_short = yahoofi.get_rsi_macd(interval="1h", period="10d")
         technical_data = yahoofi.get_rsi_macd(interval="1d", period="1mo")
         technical_data_long = yahoofi.get_rsi_macd(interval="1d", period="6mo")
+        #print(data_history_long)
 
         # Fetch positions
         active_positions_raw = lnm.futures_get_trades({'type': 'running'})
@@ -118,8 +131,20 @@ def main():
         orders_not_closed = find_not_closed_orders(history)
         orders_not_closed = update_pl_from_active_positions(orders_not_closed, active_positions)
         orders_closed = find_closed_orders(history)
+        print(user_balance)
+        print('======================')
+        print(data_history_short)
+        print('======================')
+        print(data_history)
+        print('======================')
+        print(data_history_long)
+        print('======================')
+        print(technical_data_short)
+        print(technical_data)
+        print(technical_data_long)
+        
+        exit(1)
 
-        # Analyze price action
         analyze_price_action_func = analyze_price_action_oai if use_oai else analyze_price_action_ollama if use_ollama else analyze_price_action
 
         price_data, p_cost, c_cost = analyze_price_action_func(
@@ -130,11 +155,12 @@ def main():
             technical_data=technical_data,
             technical_data_long=technical_data_long
         )
+
         prompt_cost += p_cost
         completion_cost += c_cost
-        print(price_data)
-        price_data = parse_technical_analys(price_data)
         
+        price_data = parse_technical_analys(price_data)
+       
         # Analyze past data
         history_data, p_cost, c_cost = (
             analys_past_data_aoi(orders_closed) if use_oai
@@ -145,8 +171,8 @@ def main():
         completion_cost += c_cost
         history_data = parse_past_data_analys(history_data)
 
-        # Customize prompt
-        print("customize_prompt_func")
+
+
         customize_prompt_func = (
             customize_final_prompt_gpt if use_oai
             else customize_final_prompt_ollama if use_ollama
@@ -162,6 +188,16 @@ def main():
         
 
         # Perform analysis
+        logger.log_prompt("final_analysis", {
+            "data": orders_not_closed,
+            "user_balance": user_balance,
+            "whitelist": whitelist,
+            "technical_data": price_data,
+            "past_data": history_data,
+            "active_positions": active_positions,
+            "open_positions": open_positions_ids,
+            "prompt_template": new_prompt_template
+        })
         analysis_func = analysGptV2 if use_oai else analysOllamaV2 if use_ollama else analysClaudeV4
 
         analysis_result, p_cost, c_cost = analysis_func(
@@ -174,17 +210,40 @@ def main():
             open_positions=open_positions_ids,
             prompt_template=new_prompt_template
         )
-        
+        print(f'Coût du prompt : {p_cost}')
+        print(f'Coût de complétion : {c_cost}')
+        '''
+        logger.log_response("final_analysis", {
+            "analysis_result": analysis_result,
+            "prompt_cost": p_cost,
+            "completion_cost": c_cost
+        })
+        '''
         prompt_cost += p_cost
         completion_cost += c_cost
         close_orders, update_orders, create_orders, cancel_orders = parse_analysis_result(analysis_result)
+        '''
+        logger.log_decision("parsed_analysis", {
+            "close_orders": close_orders,
+            "update_orders": update_orders,
+            "create_orders": create_orders,
+            "cancel_orders": cancel_orders
+        })
+        '''
         print(f'Coût total du prompt : {prompt_cost}')
         print(f'Coût total de complétion : {completion_cost}')
+        log_info(f"Coût total du prompt : {prompt_cost}")
+        log_info(f"Coût total de complétion : {completion_cost}")
         user_interaction(close_orders, update_orders, create_orders, active_positions_ids, open_positions_ids, cancel_orders, auto_validate)
 
     except Exception as e:
-        print("Une erreur s'est produite pendant l'exécution:", str(e))
+        logger.log_error(e, {"traceback": traceback.format_exc()})
+        error_message = f"Une erreur s'est produite pendant l'exécution: {str(e)}"
+        print(error_message)
+        log_info(error_message)
         traceback.print_exc()
+
+    logger.log("execution_end", {"message": "Fin de l'exécution de script-lnmAuto.py"})
 
 if __name__ == "__main__":
     main()

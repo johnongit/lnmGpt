@@ -5,6 +5,10 @@ load_dotenv()
 import json
 from tokencost import calculate_prompt_cost, calculate_completion_cost
 import re
+import colorama
+from colorama import Fore, Back, Style
+
+colorama.init(autoreset=True)
 
 model = "claude-3-5-sonnet-20240620"
 
@@ -32,6 +36,7 @@ def safe_format(template, **kwargs):
 
 
 def get_response(text):
+    print(f"{Fore.YELLOW}Prompt envoyé :{Style.RESET_ALL}\n{text}\n")
     message = client.messages.create(
         model=model,
         max_tokens=4096,
@@ -48,11 +53,12 @@ def get_response(text):
             }
         ]
     )
+    print(f"{Fore.GREEN}Réponse reçue :{Style.RESET_ALL}\n{message.content[0].text}\n")
     return message
 
 
 def analys_past_data(past_data):
-    message=f'''
+    message = f'''
 You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market. You will be provided with past order data, and you need to give a precise analysis of the successes and failures.
 
 Here is the past order data you will analyze:
@@ -93,10 +99,13 @@ Your entire response should be enclosed within <past_data_analys> tags. Do not i
 Remember, your goal is to provide a precise and insightful analysis of the successes and failures in the past Bitcoin trading data. Focus on delivering actionable insights that could be used to improve future trading strategies in the cryptocurrency market.
 
     '''
+    print(f"{Fore.YELLOW}Analyse des données passées - Prompt :{Style.RESET_ALL}\n{message}\n")
     past_data_analys = get_response(message).content[0].text
+    print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{past_data_analys}\n")
     
     prompt_cost = calculate_prompt_cost(message, model)
     completion_cost = calculate_completion_cost(past_data_analys, model)
+    print(f"{Fore.CYAN}Coûts - Prompt : {prompt_cost}, Completion : {completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
 
 def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions, prompt_template):
@@ -113,10 +122,9 @@ def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, acti
     }
     message = safe_format(prompt_template, **variables)
     
-    print(f'''prompt analyse finale: \n {message}''')
-    print("==============================")
+    print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{message}\n")
     data = get_response(message).content[0].text
-    print(f'''Analyse finale: {data}''' )
+    print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{data}\n")
     prompt_cost = calculate_prompt_cost(message, model)
     completion_cost = calculate_completion_cost(data, model)
     return data, prompt_cost, completion_cost
@@ -307,10 +315,9 @@ def analysClaudeV3(data, user_balance, whitelist, technical_data,past_data, acti
 
     Analyze the provided data using the tree of thought approach with multiple experts, and create your recommendations following the guidelines and format described above. Ensure that your output is properly formatted JSON within the specified XML tags.
 '''
-    print(f'''prompt analyse finale: \n {message}''')
-    print("==============================")
+    print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{message}\n")
     data = get_response(message).content[0].text
-    print(f'''Analyse finale: {data}''' )
+    print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{data}\n")
     prompt_cost = calculate_prompt_cost(message, model)
     completion_cost = calculate_completion_cost(data, model)
     return data, prompt_cost, completion_cost
@@ -333,8 +340,9 @@ The new prompt should remain in English and be placed inside <new_prompt_templat
 {prompt_template}
 </template
 '''
+    print(f"{Fore.YELLOW}Personnalisation du prompt final - Prompt :{Style.RESET_ALL}\n{message}\n")
     data = get_response(message).content[0].text
-    print(data)
+    print(f"{Fore.GREEN}Nouveau prompt :{Style.RESET_ALL}\n{data}\n")
     
     prompt_cost = calculate_prompt_cost(message, model)
 
