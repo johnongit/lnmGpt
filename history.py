@@ -181,8 +181,18 @@ def find_closed_orders(orders):
     closed_orders.sort(key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
     
     closed_orders = format_json(closed_orders)
-    
-    return closed_orders
+
+    # Limiter le nombre d'ordres et les aplatir
+    limited_closed_orders = []
+    import json
+    for order in json.loads(closed_orders)[-100:]:
+        #print(order)
+        limited_closed_orders.append(order)
+    #print("====================")
+    #print(len(limited_closed_orders))
+    #print("====================")
+    #print(limited_closed_orders)
+    return limited_closed_orders
 
 def format_json(data):
     # Charger le JSON

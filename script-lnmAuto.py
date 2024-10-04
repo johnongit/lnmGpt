@@ -10,7 +10,7 @@ from lnmarkets import rest
 from parse import parse_analysis_result, filter_order_history, parse_technical_analys, parse_past_data_analys, parse_new_prompt_template
 from user_interacte import user_interaction
 from anthropic_api import analyze_price_action, analys_past_data, analysClaudeV4, customize_final_prompt
-from openai_api import analyze_price_action_oai, analys_past_data_aoi, analysGptV2, customize_final_prompt_gpt
+from openai_api import analyze_price_action_oai, analys_past_data_aoi, analysGptV2, customize_final_prompt_gpt, analys_o1
 from ollama_api import analys_past_data_ollama, analysOllamaV2, analyze_price_action_ollama, customize_final_prompt_ollama
 from yahoo_finance_api import YahooFinanceTool
 from history import update_history, find_not_closed_orders, read_order_history, find_closed_orders, update_pl_from_active_positions
@@ -22,6 +22,7 @@ import logging
 # Add this near the top of the file
 auto_validate = "--auto-validate" in sys.argv
 use_oai = "oai" in sys.argv
+use_o1 = "o1" in sys.argv
 use_claude = "claude" in sys.argv
 use_ollama = "ollama" in sys.argv
 
@@ -66,8 +67,9 @@ def log_info(message):
 
 def main():
     logger.log("execution_start", {"message": "Début de l'exécution de script-lnmAuto.py"})
-    print("Utilisation de OpenAI" if use_oai else "Utilisation de Ollama" if use_ollama else "Utilisation de Claude")
-    log_info(f"Utilisation de {'OpenAI' if use_oai else 'Ollama' if use_ollama else 'Claude'}")
+    print("Utilisation de OpenAI" if use_oai else "Utilisation de Ollama" if use_ollama else "Utilisation de Claude" if use_claude else "Utilisation O1")
+    log_info(f"Utilisation de {'OpenAI' if use_oai else 'Ollama' if use_ollama else 'Claude' if use_claude else 'O1'}")
+    
 
     try:
         # Test connection
@@ -131,6 +133,7 @@ def main():
         orders_not_closed = find_not_closed_orders(history)
         orders_not_closed = update_pl_from_active_positions(orders_not_closed, active_positions)
         orders_closed = find_closed_orders(history)
+        '''
         print(user_balance)
         print('======================')
         print(data_history_short)
@@ -142,94 +145,107 @@ def main():
         print(technical_data_short)
         print(technical_data)
         print(technical_data_long)
-        
-        exit(1)
-
-        analyze_price_action_func = analyze_price_action_oai if use_oai else analyze_price_action_ollama if use_ollama else analyze_price_action
-
-        price_data, p_cost, c_cost = analyze_price_action_func(
-            data_history_short=data_history_short,
-            data_history=data_history,
-            data_history_long=data_history_long,
-            technical_data_short=technical_data_short,
-            technical_data=technical_data,
-            technical_data_long=technical_data_long
-        )
-
-        prompt_cost += p_cost
-        completion_cost += c_cost
-        
-        price_data = parse_technical_analys(price_data)
-       
-        # Analyze past data
-        history_data, p_cost, c_cost = (
-            analys_past_data_aoi(orders_closed) if use_oai
-            else analys_past_data_ollama(orders_closed) if use_ollama
-            else analys_past_data(orders_closed)
-        )
-        prompt_cost += p_cost
-        completion_cost += c_cost
-        history_data = parse_past_data_analys(history_data)
-
-
-
-        customize_prompt_func = (
-            customize_final_prompt_gpt if use_oai
-            else customize_final_prompt_ollama if use_ollama
-            else customize_final_prompt
-        )
-        
-        new_prompt_template, p_cost, c_cost = customize_prompt_func(
-            past_data=history_data
-        )
-        new_prompt_template = parse_new_prompt_template(
-            prompt_template=new_prompt_template
-        )
-        
-
-        # Perform analysis
-        logger.log_prompt("final_analysis", {
-            "data": orders_not_closed,
-            "user_balance": user_balance,
-            "whitelist": whitelist,
-            "technical_data": price_data,
-            "past_data": history_data,
-            "active_positions": active_positions,
-            "open_positions": open_positions_ids,
-            "prompt_template": new_prompt_template
-        })
-        analysis_func = analysGptV2 if use_oai else analysOllamaV2 if use_ollama else analysClaudeV4
-
-        analysis_result, p_cost, c_cost = analysis_func(
-            data=orders_not_closed,
-            user_balance=user_balance,
-            whitelist=whitelist,
-            technical_data=price_data,
-            past_data=history_data,
-            active_positions=active_positions_ids,
-            open_positions=open_positions_ids,
-            prompt_template=new_prompt_template
-        )
-        print(f'Coût du prompt : {p_cost}')
-        print(f'Coût de complétion : {c_cost}')
         '''
-        logger.log_response("final_analysis", {
-            "analysis_result": analysis_result,
-            "prompt_cost": p_cost,
-            "completion_cost": c_cost
-        })
-        '''
-        prompt_cost += p_cost
-        completion_cost += c_cost
+        
+        
+        if use_o1:
+            analysis_func = analys_o1
+            analysis_result, p_cost, c_cost = analysis_func(
+                user_balance=user_balance,
+                history_data_short=data_history_short,
+                history_data_medium=data_history,
+                history_data_long=data_history_long,
+                technical_data_short=technical_data_short,
+                technical_data_medium=technical_data,
+                technical_data_long=technical_data_long,
+                active_positions=active_positions_ids,
+                open_positions=open_positions_ids,
+                past_data=orders_closed
+            )
+            print(f'Coût du prompt : {p_cost}')
+            print(f'Coût de complétion : {c_cost}')
+            prompt_cost += p_cost
+            completion_cost += c_cost
+        else:
+            analyze_price_action_func = analyze_price_action_oai if use_oai else analyze_price_action_ollama if use_ollama else analyze_price_action
+
+            price_data, p_cost, c_cost = analyze_price_action_func(
+                data_history_short=data_history_short,
+                data_history=data_history,
+                data_history_long=data_history_long,
+                technical_data_short=technical_data_short,
+                technical_data=technical_data,
+                technical_data_long=technical_data_long
+            )
+
+            prompt_cost += p_cost
+            completion_cost += c_cost
+            
+            price_data = parse_technical_analys(price_data)
+        
+            # Analyze past data
+            history_data, p_cost, c_cost = (
+                analys_past_data_aoi(orders_closed) if use_oai
+                else analys_past_data_ollama(orders_closed) if use_ollama
+                else analys_past_data(orders_closed)
+            )
+            prompt_cost += p_cost
+            completion_cost += c_cost
+            history_data = parse_past_data_analys(history_data)
+
+
+
+            customize_prompt_func = (
+                customize_final_prompt_gpt if use_oai
+                else customize_final_prompt_ollama if use_ollama
+                else customize_final_prompt
+            )
+            
+            new_prompt_template, p_cost, c_cost = customize_prompt_func(
+                past_data=history_data
+            )
+            new_prompt_template = parse_new_prompt_template(
+                prompt_template=new_prompt_template
+            )
+            
+
+            # Perform analysis
+            logger.log_prompt("final_analysis", {
+                "data": orders_not_closed,
+                "user_balance": user_balance,
+                "whitelist": whitelist,
+                "technical_data": price_data,
+                "past_data": history_data,
+                "active_positions": active_positions,
+                "open_positions": open_positions_ids,
+                "prompt_template": new_prompt_template
+            })
+            analysis_func = analysGptV2 if use_oai else analysOllamaV2 if use_ollama else analysClaudeV4
+
+            analysis_result, p_cost, c_cost = analysis_func(
+                data=orders_not_closed,
+                user_balance=user_balance,
+                whitelist=whitelist,
+                technical_data=price_data,
+                past_data=history_data,
+                active_positions=active_positions_ids,
+                open_positions=open_positions_ids,
+                prompt_template=new_prompt_template
+            )
+            print(f'Coût du prompt : {p_cost}')
+            print(f'Coût de complétion : {c_cost}')
+            '''
+            logger.log_response("final_analysis", {
+                "analysis_result": analysis_result,
+                "prompt_cost": p_cost,
+                "completion_cost": c_cost
+            })
+            '''
+            prompt_cost += p_cost
+            completion_cost += c_cost
+        
         close_orders, update_orders, create_orders, cancel_orders = parse_analysis_result(analysis_result)
-        '''
-        logger.log_decision("parsed_analysis", {
-            "close_orders": close_orders,
-            "update_orders": update_orders,
-            "create_orders": create_orders,
-            "cancel_orders": cancel_orders
-        })
-        '''
+
         print(f'Coût total du prompt : {prompt_cost}')
         print(f'Coût total de complétion : {completion_cost}')
         log_info(f"Coût total du prompt : {prompt_cost}")
