@@ -185,7 +185,7 @@ def find_closed_orders(orders):
     # Limiter le nombre d'ordres et les aplatir
     limited_closed_orders = []
     import json
-    for order in json.loads(closed_orders)[-100:]:
+    for order in json.loads(closed_orders)[-30:]:
         #print(order)
         limited_closed_orders.append(order)
     #print("====================")
