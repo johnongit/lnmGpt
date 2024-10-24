@@ -23,7 +23,7 @@ def filter_order_history(orders, selected_types=["closed", "created"]):
 
 def parse_past_data_analys(past_data_analys):
     # Extraire les sections pertinentes
-    print(past_data_analys)
+    
     past_data_analys = re.findall(r'<past_data_analys>(.*?)</past_data_analys>', past_data_analys, re.DOTALL)
     
 
