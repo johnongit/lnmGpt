@@ -21,6 +21,7 @@ LNM_OPTIONS = {
 
 lnm = rest.LNMarketsRest(**LNM_OPTIONS)
 
+
 def user_interaction(close_orders, update_orders, create_orders, active_positions, open_positions, cancel_orders, auto_validate=False):
     print("\nRecommandations d'actions :")
 
@@ -66,6 +67,7 @@ def user_interaction(close_orders, update_orders, create_orders, active_position
                 print(f"Prix d'achat: {order['entry_price']}")
                 if auto_validate or input("Voulez-vous fermer cet ordre ? [o/n]: ").lower() == 'o':
                     result = close_order(order_id=order['id'],reason=order['reason'])
+                    print(f'debug close order: {result}')
                     if 'id' not in result:
                         result = cancel_order(order_id=order['id'],reason=order['reason'])
                         if result:
@@ -134,6 +136,7 @@ def user_interaction(close_orders, update_orders, create_orders, active_position
 
 # Fonctions pour interagir avec l'API LN Markets
 def close_order(order_id, reason):
+    print(order_id, reason)
     try:
         result = lnm.futures_close({'id': order_id})
         result = json.loads(result)
@@ -147,6 +150,7 @@ def close_order(order_id, reason):
     return result
 
 def cancel_order(order_id, reason):
+    print(order_id, reason)
     try:
         result = lnm.futures_cancel({'id': order_id})
         result = json.loads(result)
@@ -158,7 +162,6 @@ def cancel_order(order_id, reason):
     except ValueError as e:
         print(f'error: {e}')
     return result
-
 
 def update_order(order_id, order_type, value, reason):
     update_data = {

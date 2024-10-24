@@ -7,10 +7,11 @@ from tokencost import calculate_prompt_cost, calculate_completion_cost
 import re
 import colorama
 from colorama import Fore, Back, Style
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 colorama.init(autoreset=True)
 
-model = "claude-3-5-sonnet-20240620"
+model = "claude-3-5-sonnet-20241022"
 
 api_key = os.getenv("ANTRHOPIC_API_KEY")
 
@@ -35,82 +36,193 @@ def safe_format(template, **kwargs):
     return re.sub(pattern, replace, template)
 
 
-def get_response(text):
-    print(f"{Fore.YELLOW}Prompt envoyé :{Style.RESET_ALL}\n{text}\n")
-    message = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        temperature=0,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": text
-                    }
-                ]
-            }
-        ]
-    )
-    print(f"{Fore.GREEN}Réponse reçue :{Style.RESET_ALL}\n{message.content[0].text}\n")
-    return message
 
 
-def analys_past_data(past_data):
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type(anthropic.InternalServerError),
+    before_sleep=lambda retry_state: print(f"Retrying in {retry_state.next_action.sleep} seconds...")
+)
+def get_response(text, type=""):
+    custom_instruction = ""
+    if type == "past_data":
+        custom_instruction = "Don't forget your entire analysis MUST be enclosed within <past_data_analys></past_data_analys> tags"
+    elif type == "final":
+        custom_instruction = "Don't forget orders MUST be enclosed within <order_to_close></order_to_close>,<order_to_cancel></order_to_cancel>, <order_to_create></order_to_create> and <order_to_update></order_to_update> tags"
+    elif type == "price_action":
+        custom_instruction = "Don't forget your entire analysis MUST be enclosed within <technical_analysis></technical_analysis> tags"
+    full_response = ""
+    continue_token = "<CONTINUE>"
+  
+    system_prompt = f'''
+    
+    You are an AI assistant that explains your reasoning step by step, incorporating dynamic Chain of Thought (CoT), reflection, and verbal reinforcement learning. Follow these instructions:
+
+1. Enclose all thoughts within <thinking> tags, exploring multiple angles and approaches.
+2. Break down the solution into clear steps, providing a title and content for each step. Use a maximum of 20 steps.
+3. After each step, decide if you need another step or if you're ready to give the final answer.
+4. Continuously adjust your reasoning based on intermediate results and reflections, adapting your strategy as you progress.
+5. Regularly evaluate your progress, being critical and honest about your reasoning process.
+6. Assign a quality score between 0.0 and 1.0 to guide your approach:
+- 0.8+: Continue current approach
+- 0.5-0.7: Consider minor adjustments
+- Below 0.5: Seriously consider backtracking and trying a different approach
+7. If unsure or if your score is low, backtrack and try a different approach, explaining your decision.
+8. For mathematical problems, show all work explicitly using LaTeX for formal notation and provide detailed proofs.
+9. Explore multiple solutions individually if possible, comparing approaches in your reflections.
+10. Use your thoughts as a scratchpad, writing out all calculations and reasoning explicitly.
+11. Use at least 3 methods to derive the answer and consider alternative viewpoints.
+12. Be aware of your limitations as an AI and what you can and cannot do.
+
+After every 3 steps, perform a detailed self-reflection on your reasoning so far, considering potential biases and alternative viewpoints.
+
+If your response is incomplete, end it with the token "{continue_token}" to indicate there's more to follow.
+
+'''
+
+    messages = [
+        {
+            "role": "user",
+            "content": text + system_prompt + custom_instruction
+        }
+    ]
+
+    while True:
+        try:
+            message = client.messages.create(
+                model=model,
+                system=system_prompt,
+                max_tokens=8192,
+                temperature=0,
+                messages=messages
+            )
+
+            assistant_response = message.content[0].text
+            full_response += assistant_response
+
+            messages.append({
+                "role": "assistant",
+                "content": assistant_response
+            })
+
+            if assistant_response.strip().endswith(continue_token):
+                full_response = full_response.rsplit(continue_token, 1)[0]
+                messages.append({
+                    "role": "user",
+                    "content": f"{continue_token}"
+                })
+            else:
+                break
+
+        except anthropic.InternalServerError as e:
+            print(f"Encountered error: {e}")
+            raise
+    
+    return full_response
+
+
+
+
+
+
+def analys_past_data(past_data_short,past_data_medium="", past_data_long="", data_history_short="", data_history="", data_history_long=""):
     message = f'''
-You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market. You will be provided with past order data, and you need to give a precise analysis of the successes and failures.
+You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market across three different time horizons. You will be provided with past order data for short-term, medium-term, and long-term strategies, and you need to give a precise analysis of the successes and failures for each horizon.
 
 Here is the past order data you will analyze:
-<past_order>
-{past_data}
-</past_order>
+<past_data_short>
+{past_data_short}
+</past_data_short>
+
+<past_data_medium>
+{past_data_medium}
+</past_data_medium>
+
+<past_data_long>
+{past_data_long}
+</past_data_long>
+
+Here previous price data:
+<history_price_short>
+{data_history_short}
+</history_price_short>
+
+<history_price>
+{data_history}
+</history_price>
+
+<history_price_long>
+{data_history_long}
+</history_price_long>
+
+
 
 To complete this task, follow these steps:
 
-    Carefully review the past order data provided, paying attention to all fields including timestamp, type, order_type, side, quantity, pl, margin, leverage, price, stoploss, takeprofit, and reason.
-    Identify patterns of successful and unsuccessful orders, considering both created and closed orders.
-    Analyze the factors that contributed to the success or failure of each order, including the reasoning provided in the "reason" field.
-    Consider market conditions, timing, order size, leverage used, and the relationship between entry price, stoploss, and takeprofit levels.
-    Evaluate the overall performance of the AI Agents based on their orders, considering both long (buy) and short (sell) positions.
+1. Carefully review the past order data provided for each time horizon (short, medium, long), paying attention to all fields including timestamp, type, order_type, side, quantity, pl, margin, leverage, price, stoploss, takeprofit, and reason.
+2. For each time horizon, identify patterns of successful and unsuccessful orders, considering both created and closed orders.
+3. Analyze the factors that contributed to the success or failure of orders in each time horizon, including the reasoning provided in the "reason" field.
+4. Compare and contrast the strategies, performance, and risk management approaches across the three time horizons.
+5. Consider market conditions, timing, order size, leverage used, and the relationship between entry price, stoploss, and takeprofit levels for each horizon.
+6. Evaluate the overall performance of the AI Agents based on their orders in each time horizon, considering both long (buy) and short (sell) positions.
 
-In your analysis, make sure to:
+In your analysis for each time horizon, make sure to:
 
-    Provide specific examples from the data to support your observations, using order IDs when relevant.
-    Highlight any recurring strategies or mistakes, such as repeated entries at certain price levels or common reasons for closing positions.
-    Offer insights into what made certain orders successful and others unsuccessful, considering the balance between risk (stoploss) and reward (takeprofit).
-    Consider the broader market context if apparent from the data, including any trends in Bitcoin price movement that can be inferred from the orders.
-    Analyze the use of different order types (market vs limit) and their effectiveness.
-    Evaluate the risk management strategies employed, including the use of leverage and the setting of stoploss and takeprofit levels.
+- Provide specific examples from the data to support your observations, using order IDs when relevant.
+- Highlight any recurring strategies or mistakes specific to each time horizon.
+- Offer insights into what made certain orders successful and others unsuccessful within each timeframe.
+- Consider the broader market context and how it affects strategies in different time horizons.
+- Analyze the use of different order types (market vs limit) and their effectiveness in each horizon.
+- Evaluate the risk management strategies employed, including the use of leverage and the setting of stoploss and takeprofit levels, and how they differ across time horizons.
 
-Present your analysis in a clear, structured format. Begin with an overview of your findings, followed by detailed observations on successes and failures. Include sections on:
+Present your analysis in a clear, structured format. Begin with an overview of your findings, followed by detailed sections for each time horizon:
 
-    Entry strategies
-    Exit strategies
-    Risk management
-    Market timing
-    Use of leverage
-    Overall performance trends
+1. Short-term strategy analysis
+2. Medium-term strategy analysis
+3. Long-term strategy analysis
 
-Conclude with any overall patterns or trends you've identified and potential recommendations for improving the trading strategy.
+For each time horizon, include subsections on:
+- Entry strategies
+- Exit strategies
+- Risk management
+- Market timing
+- Use of leverage
+- Performance trends
 
-Your entire response should be enclosed within <past_data_analys> tags. Do not include the opening and closing tags in your response; they will be added automatically.
+Additionally, include a comparative analysis section:
+- Compare and contrast the effectiveness of strategies across different time horizons
+- Discuss how market conditions impact each time horizon differently
+- Analyze the risk-reward balance for each time horizon
 
-Remember, your goal is to provide a precise and insightful analysis of the successes and failures in the past Bitcoin trading data. Focus on delivering actionable insights that could be used to improve future trading strategies in the cryptocurrency market.
+Conclude with:
+- Overall patterns or trends you've identified across all time horizons
+- Potential recommendations for improving the trading strategy for each time horizon
+- Suggestions on how to balance and integrate strategies from different time horizons for a more robust overall approach
+
+Your entire response MUST be enclosed within <past_data_analys></past_data_analys> tags. Do not include the opening and closing tags in your response; they will be added automatically.
+
+Remember, your goal is to provide a precise and insightful analysis of the successes and failures in the past Bitcoin trading data across short, medium, and long-term strategies. Focus on delivering actionable insights that could be used to improve future trading strategies in the cryptocurrency market, taking into account the unique characteristics and challenges of each time horizon.
 
     '''
-    print(f"{Fore.YELLOW}Analyse des données passées - Prompt :{Style.RESET_ALL}\n{message}\n")
-    past_data_analys = get_response(message).content[0].text
-    print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{past_data_analys}\n")
+    print(f"{Fore.YELLOW}Analyse des données passées - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
+    past_data_analys = get_response(message, "past_data")
+    print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{past_data_analys}{Style.RESET_ALL}\n")
     
-    prompt_cost = calculate_prompt_cost(message, model)
-    completion_cost = calculate_completion_cost(past_data_analys, model)
+    try:
+        #prompt_cost = calculate_prompt_cost(message, model)
+        #completion_cost = calculate_completion_cost(past_data_analys, model)
+        prompt_cost = 0
+        completion_cost = 0
+    except ValueError as e:
+        prompt_cost = 0
+        completion_cost = 0
     print(f"{Fore.CYAN}Coûts - Prompt : {prompt_cost}, Completion : {completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
 
-def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions, prompt_template):
-    print("analysClaudeV4")
-    prompt_template = str(prompt_template)
+def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
+    prompt_template = read_template_from_file("./prompt_template.txt")
     variables = {
         'data': data,
         'user_balance': user_balance,
@@ -122,233 +234,25 @@ def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, acti
     }
     message = safe_format(prompt_template, **variables)
     
-    print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{message}\n")
-    data = get_response(message).content[0].text
-    print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{data}\n")
-    prompt_cost = calculate_prompt_cost(message, model)
-    completion_cost = calculate_completion_cost(data, model)
+    print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
+    data = get_response(message, "final")
+    print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{data}{Style.RESET_ALL}\n")
+    try:
+        #prompt_cost = calculate_prompt_cost(message, model)
+        #completion_cost = calculate_completion_cost(data, model)
+        prompt_cost = 0
+        completion_cost = 0
+    except ValueError as e:
+        prompt_cost = 0
+        completion_cost = 0
+
     return data, prompt_cost, completion_cost
 
 
-def analysClaudeV3(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
-
-    message = f'''
-    You are an AI trading system for the lnmarkets platform, composed of multiple expert agents collaborating to analyze market data and create trading recommendations. Your experts include:
-
-    1. Technical Analyst
-    2. Order Analyst
-    3. Risk Manager
-    4. Portfolio Manager
-
-    Each expert will analyze the data from their perspective and contribute to the final recommendations. The Portfolio Manager will oversee the process and ensure a balanced approach to risk management across short, medium, and long-term orders.
-
-    Input data:
-    User usable balance
-    <user_balance>
-    {user_balance}
-    </user_balance>
-
-    Current Running (and filled) orders (that can be closed)
-    <running_orders>
-    {active_positions}
-    </running_orders>
-
-    Current opened and not running (currently waited to be filled) orders (that can be canceled)
-    <open_orders>
-    {open_positions}
-    </open_orders>
-
-    Orders of running and opened orders performed by agents (contains reason)
-    <active_orders_list>
-    {data}
-    </active_orders_list>
-
-    Orders not to be touched
-    <whitelist>
-    {whitelist}
-    </whitelist>
-
-    Technical analysis
-    <technical_data>
-    {technical_data}
-    </technical_data>
-
-    Previous actions analysis
-    <past_data>
-    {past_data}
-    </past_data>
-
-    Imagine that four Bitcoin market analysis experts are answering this question. Each expert represents a specific role:
-
-    1- Technical Analyst:
-        Analyze price trends, support/resistance levels, and technical indicators (RSI, MACD)
-        Identify potential entry and exit points
-        When defining take profit and stop loss, consider potential fakeouts, which can be significant for Bitcoin (1000-2000 dollars)
-        Add reason, especially for resistance, take profit, stop loss, and target prices
-        Analyze current market volatility
-
-    2- Order Analyst:
-        Review past order analysis data
-        Review each running and open order, take into account reason and "time_horizon"
-        For open orders, if "time_horizon" was not provided, check target price against resistance and support to determine time horizon
-        Time horizon must be taken into account before suggesting cancellation
-        Ensures that past successes and failures are taken into account
-        Clearly distinguish between open orders and running orders
-        When discussing orders, always specify whether they are open or running, and explain the implications for execution and risk management
-        Check reason and time horizon before update, cancel and close
-        Add term (short, middle, long)
-
-    3- Risk Manager:
-        Determine appropriate leverage (ranging from 2 to 10) and position sizes. This leverage range remains low risk profile
-        For order creation and update, suggest stop-loss levels that account for potential Bitcoin fakeouts (1000-2000 dollars)
-        Evaluate overall portfolio risk
-        Balance risk across short, medium, and long-term positions
-        Ensure compliance with risk-reward ratio (> 1.7)
-
-    4- Portfolio Manager:
-        Review existing orders and positions
-        Suggest order modifications or closures based on current market conditions
-        Ensure compliance with risk-reward ratio (> 1.7)
-        Optimize the use of leverage (2 to 10) across different positions. This range remains low risk profile
-
-    Process:
-
-        Each expert will write a step of their thought process, then share it with the group.
-        After each share, all experts will move on to the next step.
-        If an expert realizes they are going down the wrong path at any point, they will withdraw from the process.
-        The process will continue until all experts have completed their analysis or withdrawn.
-
-    Final objective:
-    Based on the collaborative analysis, provide recommendations for:
-
-        Orders to close (for running orders)
-        Orders to cancel (for open orders)
-        New orders to create
-        Existing orders to update
-        Existing orders to cancel
-
-    Begin with the first step of thinking for each expert, focusing on their specific area of expertise.
-
-    Your recommendations should be provided in JSON format, with separate arrays for each action type. Use the following structure for your output:
-
-    <order_to_close>
-    [
-    {{
-        "id": "string",
-        "entry_price": float,
-        "margin": integer,
-        "side": "string",
-        "reason": "string"
-    }},
-    ...
-    ]
-    </order_to_close>
-
-    <order_to_cancel>
-    [
-    {{
-        "id": "string",
-        "entry_price": float,
-        "side": "string",
-        "margin": integer,
-        "reason": "string"
-    }},
-    ...
-    ]
-    </order_to_cancel>
-
-    <order_to_create>
-    [
-    {{
-        "type": "l" or "m",
-        "side": "b" or "s",
-        "margin": integer,
-        "leverage": integer, (2 to 10)
-        "takeprofit": integer (optional),
-        "stoploss": integer (optional),
-        "price": integer (required for type "l", use "N/A" for type "m"),
-        "reason": "Explanation",
-        "time_horizon": "short", "medium", or "long"
-    }},
-    ...
-    ]
-    </order_to_create>
-
-    <order_to_update>
-    [
-    {{
-        "id": "string",
-        "type": "takeprofit" or "stoploss",
-        "value": float,
-        "side": "string",
-        "margin": integer,
-        "entry_price": float,
-        "reason": "Explanation"
-    }},
-    ...
-    ]
-    </order_to_update>
-
-    Follow these guidelines when creating your recommendations:
-
-    1. Incorporate insights from all expert analyses. Insert all analyses between <expert></expert>
-    2. Ensure a balanced risk profile across short, medium, and long-term positions.
-    3. Consider the user's available balance and existing orders.
-    4. For order creation:
-    - Use 'm' for market orders (set price to "N/A") and 'l' for limit orders.
-    - Use 'b' for buy orders and 's' for sell orders.
-    - Provide only the margin, not the quantity.
-    - Include a reason for each order.
-    - Specify the time horizon for each order (short, medium, or long).
-    - Set leverage between 2 and 10, optimizing based on risk and market conditions.
-    5. For order updates:
-    - Specify whether you're updating the takeprofit or stoploss.
-    - Include a reason for each update.
-    - If the value is a round number (i.e., has no decimal places), represent it as an integer without a decimal point. If it has decimal places, use a float.
-    6. For order closure: reserved for running_orders order
-    7. For order cancellation: reserved for open_orders
-    8. Ensure that your recommendations do not include any orders from the <whitelist></whitelist>.
-    9. Consider past order performance (success and failures) when making new recommendations.
-    10. Maintain a risk-reward ratio of more than 1.7 for all positions.
-    11. Place stop losses at a safe distance from support/resistance levels to avoid false triggers due to Bitcoin fakeouts (1000-2000 dollars), while still protecting the position.
-    12. Balance the portfolio risk by adjusting position sizes and leverages (2 to 10) across different time horizons.
-
-    Analyze the provided data using the tree of thought approach with multiple experts, and create your recommendations following the guidelines and format described above. Ensure that your output is properly formatted JSON within the specified XML tags.
-'''
-    print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{message}\n")
-    data = get_response(message).content[0].text
-    print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{data}\n")
-    prompt_cost = calculate_prompt_cost(message, model)
-    completion_cost = calculate_completion_cost(data, model)
-    return data, prompt_cost, completion_cost
 
 
-def customize_final_prompt(past_data):
-    print("===================================")
-    print("in customize_final_prompt")
-    prompt_template = read_template_from_file("./prompt_template.txt")
-    message = f'''
-Based on the data inside <past_data>, adapt the template prompt inside <template>.
-the new prompt MUST BE complete and very explicit. Never refers to the "original template"
-The new prompt should remain in English and be placed inside <new_prompt_template>.
 
-<past_data>
-{past_data}
-</past_data>
 
-<template>
-{prompt_template}
-</template
-'''
-    print(f"{Fore.YELLOW}Personnalisation du prompt final - Prompt :{Style.RESET_ALL}\n{message}\n")
-    data = get_response(message).content[0].text
-    print(f"{Fore.GREEN}Nouveau prompt :{Style.RESET_ALL}\n{data}\n")
-    
-    prompt_cost = calculate_prompt_cost(message, model)
-
-    completion_cost = calculate_completion_cost(data, model)
-    print("===================================")
-    return data, prompt_cost, completion_cost
 
 def analyze_price_action(data_history_short, data_history, data_history_long, technical_data_short, technical_data, technical_data_long):
     message = f'''
@@ -412,13 +316,21 @@ Conclude your analysis with an overall summary and strategic recommendations for
 Added directive to reduce hallucinations:
 To reduce hallucinations, do not invent or provide any metrics or specific numerical values if you are not certain you can determine them with certainty based on the given data. If you are unsure about a specific metric or value, state that it cannot be determined with the available information.
     '''
+    print(f"{Fore.YELLOW}Analyse Price Action - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
+    technical_analysis = get_response(message, "price_action")
     
-    technical_analysis = get_response(message).content[0].text
-    
-    technical_data = get_response(message).content[0].text
-    prompt_cost = calculate_prompt_cost(message, model)
-    completion_cost = calculate_completion_cost(technical_data, model)
+    print(f"{Fore.GREEN}Analyse Price Action - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{technical_analysis}{Style.RESET_ALL}\n")
+    try:
+        #prompt_cost = calculate_prompt_cost(message, model)
+        #completion_cost = calculate_completion_cost(technical_analysis, model)
+        prompt_cost = 0
+        completion_cost = 0
+    except ValueError as e:
+        prompt_cost = 0
+        completion_cost = 0
 
+    print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
     
     
     return technical_analysis, prompt_cost, completion_cost
+

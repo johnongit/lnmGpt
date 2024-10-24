@@ -1,22 +1,28 @@
-from openai import OpenAI
+import os
+import google.generativeai as genai
 from dotenv import load_dotenv
 import os
 load_dotenv()
 import json
-import re
 from tokencost import calculate_prompt_cost, calculate_completion_cost
+import re
 import colorama
 from colorama import Fore, Back, Style
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import time
 
-colorama.init(autoreset=True)
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-client = OpenAI(
-    base_url = 'http://localhost:4000/',
-    api_key='your_secret_key', # required, but unused
-)
-model='gemini-pro'
+model_name="gemini-1.5-pro"
 
+# Create the model
+generation_config = {
+  "temperature": 0,
+  "top_p": 0.95,
+  "top_k": 64,
+  "max_output_tokens": 8192,
+  "response_mime_type": "text/plain",
+}
 
 def read_template_from_file(file_path):
     """Lit le contenu du fichier template."""
@@ -33,7 +39,6 @@ def safe_format(template, **kwargs):
     
     pattern = r'\{([^}]*)\}'
     return re.sub(pattern, replace, template)
-
 
 
 @retry(
@@ -69,52 +74,44 @@ After every 3 steps, perform a detailed self-reflection on your reasoning so far
 
 If your response is incomplete, end it with the token "{continue_token}" to indicate there's more to follow.
 '''
+    model = genai.GenerativeModel(
+      model_name=model_name,
+      generation_config=generation_config,
+      system_instruction=system_prompt,
+    )
 
-
-    messages = [
-      {
-          "role": "system",
-          "content": system_prompt
-      },
-      {
-          "role": "user",
-          "content": text
-      }
-    ]
-
+    history = []
     while True:
         try:
-            message = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0,
-                max_tokens=4096,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0,
-                response_format={
-                    "type": "text"
-                }
+            chat_session = model.start_chat(
+                  history=history
             )
+            response = chat_session.send_message(text)
 
-            assistant_response = message.choices[0].message.content
+            assistant_response = response.text
             full_response += assistant_response
 
-            messages.append({
-                "role": "assistant",
-                "content": assistant_response
+            history.append({
+                "role": "model",
+                "parts": [assistant_response]
             })
 
             if assistant_response.strip().endswith(continue_token):
                 full_response = full_response.rsplit(continue_token, 1)[0]
-                messages.append({
+                history.append({
                     "role": "user",
-                    "content": f"{continue_token}"
+                    "parts": [f"{continue_token}"]
                 })
+          
             else:
                 break
+            wait=30
+            print(f'Need to continue: sleep for {wait} seconds')
+            time.sleep(wait)
 
         except Exception as e:
+            import traceback
+            trace = traceback.format_exc()
             print(f"Encountered error: {e}")
             raise
     
@@ -122,8 +119,82 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
 
 
 
-def analys_past_data_ollama(past_data_short, past_data_medium, past_data_long):
-    message=f'''
+
+def analyze_price_action_gemini(data_history_short, data_history, data_history_long, technical_data_short, technical_data, technical_data_long):
+    message = f'''
+    You are a professional stock market analyst specializing in bitcoin and price action analysis. Your task is to thoroughly analyze bitcoin price data, as well as the RSI and MACD technical indicators, to provide a detailed analysis for short, medium, and long term.
+
+Input data for your analysis:
+
+<history_price_short>
+{data_history_short}
+</history_price_short>
+
+<history_price>
+{data_history}
+</history_price>
+
+<history_price_long>
+{data_history_long}
+</history_price_long>
+
+<technical_price_short>
+{technical_data_short}
+</technical_price_short>
+
+<technical_price>
+{technical_data}
+</technical_price>
+
+<technical_data_long>
+{technical_data_long}
+</technical_data_long>
+
+For each time horizon (short, medium, and long term), analyze and provide the following information:
+
+    Key resistance and support levels
+    Current trend and trend strength
+    Market configuration (range, bullish trend, bearish trend, etc.)
+    Significant Japanese candlestick patterns
+    Potential divergences between price and technical indicators (RSI, MACD)
+    Volumes and their interpretation, including identification of low volume cycles
+    Market momentum
+    Relevant Fibonacci levels
+    Anticipation of potential future movements
+
+Analysis procedure for each time horizon:
+
+    Carefully examine historical and technical data.
+    Identify key support and resistance levels by observing important turning points.
+    Determine the current trend and its strength by analyzing price direction and technical indicators.
+    Assess the market configuration considering the trend and recent price movements.
+    Spot significant Japanese candlestick patterns and their implications.
+    Look for divergences between price and technical indicators.
+    Analyze volumes and their impact on price movements, paying special attention to identifying low volume cycles and their significance.
+    Evaluate market momentum using indicators and price movements.
+    Identify relevant Fibonacci levels for retracements and extensions.
+    Formulate anticipations of potential future movements based on the overall analysis.
+
+Present your complete technical analysis between the tags <technical_analysis> and </technical_analysis>. Structure your analysis into three distinct sections: short term, medium term, and long term. For each section, provide the requested information in a clear, concise, and reasoned manner.
+
+Conclude your analysis with an overall summary and strategic recommendations for traders and investors.
+
+Added directive to reduce hallucinations:
+To reduce hallucinations, do not invent or provide any metrics or specific numerical values if you are not certain you can determine them with certainty based on the given data. If you are unsure about a specific metric or value, state that it cannot be determined with the available information.
+    '''
+    print(f"{Fore.YELLOW}Analyse Price Action - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
+    technical_analysis = get_response(message)
+    
+    print(f"{Fore.GREEN}Analyse Price Action - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{technical_analysis}{Style.RESET_ALL}\n")
+    prompt_cost = calculate_prompt_cost(message, model_name)
+    completion_cost = calculate_completion_cost(technical_analysis, model_name)
+    print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
+    
+    
+    return technical_analysis, prompt_cost, completion_cost
+
+def analys_past_data_gemini(past_data_short,past_data_medium="", past_data_long=""):
+    message = f'''
 You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market across three different time horizons. You will be provided with past order data for short-term, medium-term, and long-term strategies, and you need to give a precise analysis of the successes and failures for each horizon.
 
 Here is the past order data you will analyze:
@@ -189,17 +260,16 @@ Remember, your goal is to provide a precise and insightful analysis of the succe
     print(f"{Fore.YELLOW}Analyse des données passées - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
     past_data_analys = get_response(message)
     print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{past_data_analys}{Style.RESET_ALL}\n")
-    prompt_cost = 0
-    completion_cost = 0
-    print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
+    
+    prompt_cost = calculate_prompt_cost(message, model_name)
+    completion_cost = calculate_completion_cost(past_data_analys, model_name)
+    print(f"{Fore.CYAN}Coûts - Prompt : {prompt_cost}, Completion : {completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
 
 
-
-
-
-def analysOllamaV2(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
+def analys_gemini(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
     prompt_template = read_template_from_file("./prompt_template.txt")
+    
     variables = {
         'data': data,
         'user_balance': user_balance,
@@ -214,79 +284,6 @@ def analysOllamaV2(data, user_balance, whitelist, technical_data,past_data, acti
     print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
     data = get_response(message)
     print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{data}{Style.RESET_ALL}\n")
-    prompt_cost = 0
-    completion_cost = 0
+    prompt_cost = calculate_prompt_cost(message, model_name)
+    completion_cost = calculate_completion_cost(data, model_name)
     return data, prompt_cost, completion_cost
-
-
-def analyze_price_action_ollama(data_history_short, data_history, data_history_long, technical_data_short, technical_data, technical_data_long):
-    print('in analyze_price_action_ollama')
-    message = f'''
-    You are a professional stock market analyst specializing in bitcoin and price action analysis. Your task is to thoroughly analyze bitcoin price data, as well as the RSI and MACD technical indicators, to provide a detailed analysis for short, medium, and long term.
-
-Input data for your analysis:
-
-<history_price_short>
-{data_history_short}
-</history_price_short>
-
-<history_price>
-{data_history}
-</history_price>
-
-<history_price_long>
-{data_history_long}
-</history_price_long>
-
-<technical_price_short>
-{technical_data_short}
-</technical_price_short>
-
-<technical_price>
-{technical_data}
-</technical_price>
-
-<technical_data_long>
-{technical_data_long}
-</technical_data_long>
-
-For each time horizon (short, medium, and long term), analyze and provide the following information:
-
-    Key resistance and support levels
-    Current trend and trend strength
-    Market configuration (range, bullish trend, bearish trend, etc.)
-    Significant Japanese candlestick patterns
-    Potential divergences between price and technical indicators (RSI, MACD)
-    Volumes and their interpretation, including identification of low volume cycles
-    Market momentum
-    Relevant Fibonacci levels
-    Anticipation of potential future movements
-
-Analysis procedure for each time horizon:
-
-    Carefully examine historical and technical data.
-    Identify key support and resistance levels by observing important turning points.
-    Determine the current trend and its strength by analyzing price direction and technical indicators.
-    Assess the market configuration considering the trend and recent price movements.
-    Spot significant Japanese candlestick patterns and their implications.
-    Look for divergences between price and technical indicators.
-    Analyze volumes and their impact on price movements, paying special attention to identifying low volume cycles and their significance.
-    Evaluate market momentum using indicators and price movements.
-    Identify relevant Fibonacci levels for retracements and extensions.
-    Formulate anticipations of potential future movements based on the overall analysis.
-
-Present your complete technical analysis between the tags <technical_analysis> and </technical_analysis>. Structure your analysis into three distinct sections: short term, medium term, and long term. For each section, provide the requested information in a clear, concise, and reasoned manner.
-
-Conclude your analysis with an overall summary and strategic recommendations for traders and investors.
-
-Added directive to reduce hallucinations:
-To reduce hallucinations, do not invent or provide any metrics or specific numerical values if you are not certain you can determine them with certainty based on the given data. If you are unsure about a specific metric or value, state that it cannot be determined with the available information.
-    '''
-    print(f"{Fore.YELLOW}Analyse Price Action - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
-    technical_analysis = get_response(message)
-    print(f"{Fore.GREEN}Analyse Price Action - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{technical_analysis}{Style.RESET_ALL}\n")
-    prompt_cost = 0
-    completion_cost = 0
-    
-    print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
-    return technical_analysis, prompt_cost, completion_cost

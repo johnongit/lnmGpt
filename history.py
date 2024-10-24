@@ -152,47 +152,57 @@ def find_not_closed_orders(orders):
     return active_orders
 
 
-def find_closed_orders(orders):
-    order_dict = {}
 
-    # Premier parcours : stocker les états de chaque ordre
-    for event in orders:
-        order_id = event['data']['id']
-        event_timestamp = datetime.strptime(event['timestamp'], '%Y-%m-%d %H:%M:%S')
-        
-        if order_id not in order_dict:
-            order_dict[order_id] = {'created': None, 'closed': None, 'updates': []}
-        
-        if event['type'] == 'created':
-            order_dict[order_id]['created'] = event
-        elif event['type'] == 'closed':
-            order_dict[order_id]['closed'] = event
-        elif event['type'] == 'updated':
-            order_dict[order_id]['updates'].append(event)
+from datetime import datetime
+import json
 
-    # Deuxième parcours : collecter les ordres fermés
-    closed_orders = []
-    for order_id, events in order_dict.items():
-        if events['created'] and events['closed']:  # Ne conserver que les ordres avec un 'created' et un 'closed'
-            order_events = [events['created']] + events['updates'] + [events['closed']]
-            closed_orders.extend(order_events)
+def find_closed_orders(orders, time_horizon=None):
+  order_dict = {}
 
-    # Trier les ordres fermés par timestamp
-    closed_orders.sort(key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
-    
-    closed_orders = format_json(closed_orders)
+  # Premier parcours : stocker les états de chaque ordre
+  for event in orders:
+      order_id = event['data']['id']
+      event_timestamp = datetime.strptime(event['timestamp'], '%Y-%m-%d %H:%M:%S')
+      
+      if order_id not in order_dict:
+          order_dict[order_id] = {'created': None, 'closed': None, 'updates': [], 'time_horizon': None}
+      
+      if event['type'] == 'created':
+          order_dict[order_id]['created'] = event
+          if 'time_horizon' in event['data']:
+              order_dict[order_id]['time_horizon'] = event['data']['time_horizon']
+      elif event['type'] == 'closed':
+          order_dict[order_id]['closed'] = event
+      elif event['type'] == 'updated':
+          order_dict[order_id]['updates'].append(event)
 
-    # Limiter le nombre d'ordres et les aplatir
-    limited_closed_orders = []
-    import json
-    for order in json.loads(closed_orders)[-30:]:
-        #print(order)
-        limited_closed_orders.append(order)
-    #print("====================")
-    #print(len(limited_closed_orders))
-    #print("====================")
-    #print(limited_closed_orders)
-    return limited_closed_orders
+  # Deuxième parcours : collecter les ordres fermés et exécutés
+  closed_orders = []
+  for order_id, events in order_dict.items():
+      if events['created'] and events['closed']:
+          closed_event = events['closed']
+          profit_loss = closed_event['data'].get('profit_loss', closed_event['data'].get('pl', 0))
+          
+          # Vérifier si l'ordre a été exécuté (profit/perte non nul)
+          if profit_loss != 0:
+              # Vérifier si le time_horizon correspond (si spécifié)
+              if time_horizon is None or events['time_horizon'] == time_horizon:
+                  order_events = [events['created']] + events['updates'] + [events['closed']]
+                  closed_orders.extend(order_events)
+
+  # Trier les ordres fermés par timestamp
+  closed_orders.sort(key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
+  
+  # Limiter le nombre d'ordres aux 30 derniers
+  limited_closed_orders = closed_orders[-30:]
+  if time_horizon=="medium":
+    limited_closed_orders = closed_orders[-50:]
+  elif time_horizon=="long":
+    limited_closed_orders = closed_orders[-100:]
+
+  return limited_closed_orders
+
+
 
 def format_json(data):
     # Charger le JSON
@@ -208,7 +218,7 @@ def format_json(data):
             "uid": item.get("data", {}).get("uid", ""),
             "order_type": item.get("data", {}).get("type", ""),
             "side": item.get("data", {}).get("side", ""),
-            "pl": item.get("data", {}).get("pl", ""),
+            "pl": item.get("data", {}).get("pl") or item.get("data", {}).get("profit_loss", ""),
             "quantity": item.get("data", {}).get("quantity", ""),
             "margin": item.get("data", {}).get("margin", ""),
             "leverage": item.get("data", {}).get("leverage", ""),
