@@ -124,9 +124,6 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
 
 
 
-
-
-
 def analys_past_data(past_data_short,past_data_medium="", past_data_long="", data_history_short="", data_history="", data_history_long=""):
     message = f'''
 You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market across three different time horizons. You will be provided with past order data for short-term, medium-term, and long-term strategies, and you need to give a precise analysis of the successes and failures for each horizon.
@@ -211,15 +208,15 @@ Remember, your goal is to provide a precise and insightful analysis of the succe
     print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{past_data_analys}{Style.RESET_ALL}\n")
     
     try:
-        #prompt_cost = calculate_prompt_cost(message, model)
-        #completion_cost = calculate_completion_cost(past_data_analys, model)
-        prompt_cost = 0
-        completion_cost = 0
+        prompt_cost = calculate_prompt_cost(message, model)
+        completion_cost = calculate_completion_cost(past_data_analys, model)
+
     except ValueError as e:
         prompt_cost = 0
         completion_cost = 0
     print(f"{Fore.CYAN}Coûts - Prompt : {prompt_cost}, Completion : {completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
+
 
 def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
     prompt_template = read_template_from_file("./prompt_template.txt")
@@ -238,10 +235,9 @@ def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, acti
     data = get_response(message, "final")
     print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{data}{Style.RESET_ALL}\n")
     try:
-        #prompt_cost = calculate_prompt_cost(message, model)
-        #completion_cost = calculate_completion_cost(data, model)
-        prompt_cost = 0
-        completion_cost = 0
+        prompt_cost = calculate_prompt_cost(message, model)
+        completion_cost = calculate_completion_cost(data, model)
+
     except ValueError as e:
         prompt_cost = 0
         completion_cost = 0
@@ -321,10 +317,9 @@ To reduce hallucinations, do not invent or provide any metrics or specific numer
     
     print(f"{Fore.GREEN}Analyse Price Action - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{technical_analysis}{Style.RESET_ALL}\n")
     try:
-        #prompt_cost = calculate_prompt_cost(message, model)
-        #completion_cost = calculate_completion_cost(technical_analysis, model)
-        prompt_cost = 0
-        completion_cost = 0
+        prompt_cost = calculate_prompt_cost(message, model)
+        completion_cost = calculate_completion_cost(technical_analysis, model)
+
     except ValueError as e:
         prompt_cost = 0
         completion_cost = 0

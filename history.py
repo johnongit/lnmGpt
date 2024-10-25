@@ -155,9 +155,20 @@ def find_not_closed_orders(orders):
 
 from datetime import datetime
 import json
-
 def find_closed_orders(orders, time_horizon=None):
   order_dict = {}
+  stats = {
+      'total_trades': 0,
+      'winning_trades': 0,
+      'losing_trades': 0,
+      'total_pl': 0,
+      'avg_pl': 0,
+      'win_rate': 0,
+      'max_profit': 0,
+      'max_loss': 0,
+      'avg_leverage': 0,
+      'total_leverage': 0
+  }
 
   # Premier parcours : stocker les états de chaque ordre
   for event in orders:
@@ -165,7 +176,12 @@ def find_closed_orders(orders, time_horizon=None):
       event_timestamp = datetime.strptime(event['timestamp'], '%Y-%m-%d %H:%M:%S')
       
       if order_id not in order_dict:
-          order_dict[order_id] = {'created': None, 'closed': None, 'updates': [], 'time_horizon': None}
+          order_dict[order_id] = {
+              'created': None, 
+              'closed': None, 
+              'updates': [], 
+              'time_horizon': None
+          }
       
       if event['type'] == 'created':
           order_dict[order_id]['created'] = event
@@ -176,7 +192,7 @@ def find_closed_orders(orders, time_horizon=None):
       elif event['type'] == 'updated':
           order_dict[order_id]['updates'].append(event)
 
-  # Deuxième parcours : collecter les ordres fermés et exécutés
+  # Deuxième parcours : collecter les ordres fermés et calculer les stats
   closed_orders = []
   for order_id, events in order_dict.items():
       if events['created'] and events['closed']:
@@ -187,20 +203,45 @@ def find_closed_orders(orders, time_horizon=None):
           if profit_loss != 0:
               # Vérifier si le time_horizon correspond (si spécifié)
               if time_horizon is None or events['time_horizon'] == time_horizon:
+                  # Mise à jour des statistiques
+                  stats['total_trades'] += 1
+                  stats['total_pl'] += profit_loss
+                  
+                  
+                  if profit_loss > 0:
+                      stats['winning_trades'] += 1
+                      stats['max_profit'] = max(stats['max_profit'], profit_loss)
+                  else:
+                      stats['losing_trades'] += 1
+                      stats['max_loss'] = min(stats['max_loss'], profit_loss)
+                  
                   order_events = [events['created']] + events['updates'] + [events['closed']]
                   closed_orders.extend(order_events)
+
+  # Calcul des moyennes et ratios
+  if stats['total_trades'] > 0:
+      stats['win_rate'] = (stats['winning_trades'] / stats['total_trades']) * 100
+      stats['avg_pl'] = stats['total_pl'] / stats['total_trades']
+      stats['avg_leverage'] = stats['total_leverage'] / stats['total_trades']
 
   # Trier les ordres fermés par timestamp
   closed_orders.sort(key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
   
-  # Limiter le nombre d'ordres aux 30 derniers
-  limited_closed_orders = closed_orders[-30:]
-  if time_horizon=="medium":
-    limited_closed_orders = closed_orders[-50:]
-  elif time_horizon=="long":
-    limited_closed_orders = closed_orders[-100:]
+  # Limiter le nombre d'ordres selon l'horizon temporel
+  limit = 30 if time_horizon == "short" else 50 if time_horizon == "medium" else 100
+  limited_closed_orders = closed_orders[-limit:]
 
-  return limited_closed_orders
+  # Formater les ordres en JSON
+  formatted_orders = format_json(limited_closed_orders)
+  
+  # Ajouter les statistiques au résultat
+  result = {
+      'orders': formatted_orders,
+      'stats': stats
+  }
+  
+  
+  return result
 
 
 
