@@ -13,7 +13,7 @@ colorama.init(autoreset=True)
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 model_o1 = "o1-preview"
-model = "gpt-4o-2024-08-06"
+model = "chatgpt-4o-latest"
 
 # ... code commenté pour la configuration alternative ...
 
@@ -36,11 +36,21 @@ def safe_format(template, **kwargs):
 
 
 
-def get_response(text):
+def get_response(text, type=""):
+    custom_instruction = ""
+    if type == "past_data":
+        custom_instruction = "Don't forget your entire analysis MUST be enclosed within <past_data_analys></past_data_analys> tags"
+    elif type == "final":
+        custom_instruction = "Don't forget orders MUST be enclosed within <order_to_close></order_to_close>,<order_to_cancel></order_to_cancel>, <order_to_create></order_to_create> and <order_to_update></order_to_update> tags"
+    elif type == "price_action":
+        custom_instruction = "Don't forget your entire analysis MUST be enclosed within <technical_analysis></technical_analysis> tags"
     full_response = ""
+
     continue_token = "<CONTINUE>"
   
-    system_prompt = f'''You are an AI assistant that explains your reasoning step by step, incorporating dynamic Chain of Thought (CoT), reflection, and verbal reinforcement learning. Follow these instructions:
+    system_prompt = f'''
+    
+    You are an AI assistant that explains your reasoning step by step, incorporating dynamic Chain of Thought (CoT), reflection, and verbal reinforcement learning. Follow these instructions:
 
 1. Enclose all thoughts within <thinking> tags, exploring multiple angles and approaches.
 2. Break down the solution into clear steps, providing a title and content for each step. Use a maximum of 20 steps.
@@ -61,17 +71,18 @@ def get_response(text):
 After every 3 steps, perform a detailed self-reflection on your reasoning so far, considering potential biases and alternative viewpoints.
 
 If your response is incomplete, end it with the token "{continue_token}" to indicate there's more to follow.
+
 '''
 
 
     messages = [
       {
           "role": "system",
-          "content": system_prompt
+          "content": system_prompt 
       },
       {
           "role": "user",
-          "content": text
+          "content": text + system_prompt + custom_instruction
       }
     ]
 
@@ -401,9 +412,9 @@ def get_response_o1(text):
     return response
 
 
-def analys_past_data_aoi(past_data_short, past_data_medium, past_data_long):
-    message=f'''
-You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market across three different time horizons. You will be provided with past order data for short-term, medium-term, and long-term strategies, and you need to give a precise analysis of the successes and failures for each horizon.
+def analys_past_data_oai(past_data_short,past_data_medium="", past_data_long="", data_history_short="", data_history="", data_history_long=""):
+    message = f'''
+You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market across three different time horizons, with a particular focus on stop-loss effectiveness and positioning.
 
 Here is the past order data you will analyze:
 <past_data_short>
@@ -418,51 +429,99 @@ Here is the past order data you will analyze:
 {past_data_long}
 </past_data_long>
 
-To complete this task, follow these steps:
+Market Context:
+<history_price_short>
+{data_history_short}
+</history_price_short>
 
-1. Carefully review the past order data provided for each time horizon (short, medium, long), paying attention to all fields including timestamp, type, order_type, side, quantity, pl, margin, leverage, price, stoploss, takeprofit, and reason.
-2. For each time horizon, identify patterns of successful and unsuccessful orders, considering both created and closed orders.
-3. Analyze the factors that contributed to the success or failure of orders in each time horizon, including the reasoning provided in the "reason" field.
-4. Compare and contrast the strategies, performance, and risk management approaches across the three time horizons.
-5. Consider market conditions, timing, order size, leverage used, and the relationship between entry price, stoploss, and takeprofit levels for each horizon.
-6. Evaluate the overall performance of the AI Agents based on their orders in each time horizon, considering both long (buy) and short (sell) positions.
+<history_price>
+{data_history}
+</history_price>
 
-In your analysis for each time horizon, make sure to:
+<history_price_long>
+{data_history_long}
+</history_price_long>
 
-- Provide specific examples from the data to support your observations, using order IDs when relevant.
-- Highlight any recurring strategies or mistakes specific to each time horizon.
-- Offer insights into what made certain orders successful and others unsuccessful within each timeframe.
-- Consider the broader market context and how it affects strategies in different time horizons.
-- Analyze the use of different order types (market vs limit) and their effectiveness in each horizon.
-- Evaluate the risk management strategies employed, including the use of leverage and the setting of stoploss and takeprofit levels, and how they differ across time horizons.
+Important Context:
+- The trading bot executes at most once per day
+- Not all days have executions
+- Bitcoin can experience significant price movements (\$1000-\$3000) within a day
+- Stop-losses need to account for daily volatility and the bot's execution frequency
 
-Present your analysis in a clear, structured format. Begin with an overview of your findings, followed by detailed sections for each time horizon:
+For each time horizon, analyze:
 
-1. Short-term strategy analysis
-2. Medium-term strategy analysis
-3. Long-term strategy analysis
+1. Stop-Loss Analysis:
+ - Calculate the average distance between entry price and stop-loss for both winning and losing trades
+ - Identify patterns in stop-loss hits (time of day, market conditions, volatility)
+ - Evaluate if stop-losses were too tight given daily Bitcoin volatility
+ - Compare stop-loss distances across different market conditions
+ - Analyze if wider stop-losses would have resulted in eventual profitable trades
+ - Calculate the percentage of losses due to stop-loss hits vs. manual closures
 
-For each time horizon, include subsections on:
-- Entry strategies
-- Exit strategies
-- Risk management
-- Market timing
-- Use of leverage
-- Performance trends
+2. Stop-Loss Recommendations:
+ - Suggest minimum stop-loss distances based on:
+   * Daily Bitcoin volatility (\$1000-\$3000 range)
+   * Time horizon of the trade
+   * Market conditions (trending vs. ranging)
+ - Recommend stop-loss adjustment strategies for different market conditions
+ - Propose position sizing adjustments to accommodate wider stop-losses
 
-Additionally, include a comparative analysis section:
-- Compare and contrast the effectiveness of strategies across different time horizons
-- Discuss how market conditions impact each time horizon differently
-- Analyze the risk-reward balance for each time horizon
+3. Performance Metrics:
+ - Win rate with detailed stop-loss analysis
+ - Average profit/loss including stop-loss impact
+ - Risk management effectiveness
+ - Entry and exit timing accuracy
+ - Correlation between stop-loss distance and trade success
 
-Conclude with:
-- Overall patterns or trends you've identified across all time horizons
-- Potential recommendations for improving the trading strategy for each time horizon
-- Suggestions on how to balance and integrate strategies from different time horizons for a more robust overall approach
+4. Market Context Analysis:
+ - Impact of volatility on stop-loss hits
+ - Relationship between market conditions and optimal stop-loss placement
+ - Analysis of false breakouts leading to stop-loss hits
+ - Identification of optimal stop-loss zones based on market structure
+
+5. Time Horizon-Specific Analysis:
+ Short-term trades (1-3 days):
+ - Minimum recommended stop-loss distance
+ - Optimal stop-loss placement relative to support/resistance
+ - Impact of intraday volatility
+
+ Medium-term trades (4-14 days):
+ - Stop-loss positioning for multi-day holds
+ - Adjustment for weekly volatility patterns
+ - Balance between protection and trade thesis
+
+ Long-term trades (15+ days):
+ - Wide stop-loss strategies
+ - Major support/resistance consideration
+ - Market cycle impact on stop-loss placement
+
+6. Risk Management Recommendations:
+ - Position sizing guidelines based on stop-loss distance
+ - Leverage adjustment recommendations
+ - Stop-loss placement strategies for different market conditions
+ - Risk-reward ratio optimization
+
+Present your analysis in a structured format with:
+1. Quantitative analysis of stop-loss effectiveness
+2. Pattern identification in stop-loss hits
+3. Specific recommendations for improvement
+4. Time horizon-specific guidelines
+5. Risk management framework adjustments
+
+Your analysis must be data-driven and include:
+- Specific examples of both successful and failed trades
+- Statistical analysis of stop-loss distances
+- Clear recommendations for minimum stop-loss distances by time horizon
+- Position sizing and leverage recommendations based on stop-loss requirements
+
+Remember that the bot's daily execution frequency means:
+- Stop-losses must account for normal daily Bitcoin volatility
+- Position sizing must be conservative enough for wider stop-losses
+- Risk management must consider the inability to adjust positions intraday
+
+Your entire analysis must be enclosed within <past_data_analys></past_data_analys> tags.
 
 Remember, your goal is to provide a precise and insightful analysis of the successes and failures in the past Bitcoin trading data across short, medium, and long-term strategies. Focus on delivering actionable insights that could be used to improve future trading strategies in the cryptocurrency market, taking into account the unique characteristics and challenges of each time horizon.
-
-Your entire response MUST be enclosed within <past_data_analys></past_data_analys> tags. 
 
     '''
     print(f"{Fore.YELLOW}Analyse des données passées - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")

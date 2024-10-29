@@ -10,7 +10,7 @@ from lnmarkets import rest
 from parse import parse_analysis_result, filter_order_history, parse_technical_analys, parse_past_data_analys, parse_new_prompt_template
 from user_interacte import user_interaction
 from anthropic_api import analyze_price_action, analys_past_data, analysClaudeV4
-from openai_api import analyze_price_action_oai, analys_past_data_aoi, analysGptV2, analys_o1
+from openai_api import analyze_price_action_oai, analys_past_data_oai, analysGptV2, analys_o1
 from ollama_api import analys_past_data_ollama, analysOllamaV2, analyze_price_action_ollama
 from gemini_api import analyze_price_action_gemini, analys_past_data_gemini, analys_gemini
 from yahoo_finance_api import YahooFinanceTool
@@ -186,7 +186,7 @@ def main():
         
             # Analyze past data
             history_data, p_cost, c_cost = (
-                analys_past_data_aoi(orders_closed_short, orders_closed_medium, orders_closed_long ) if use_oai
+                analys_past_data_oai(orders_closed_short, orders_closed_medium, orders_closed_long, data_history_short,data_history,data_history_long  ) if use_oai
                 else analys_past_data_ollama(orders_closed_short, orders_closed_medium, orders_closed_long )  if use_ollama
                 else analys_past_data_gemini(orders_closed_short, orders_closed_medium, orders_closed_long ) if use_gemini
                 else analys_past_data(orders_closed_short, orders_closed_medium, orders_closed_long, data_history_short,data_history,data_history_long ) 
