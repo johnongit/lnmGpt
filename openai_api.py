@@ -7,13 +7,14 @@ import re
 from tokencost import calculate_prompt_cost, calculate_completion_cost
 import colorama
 from colorama import Fore, Back, Style
-
+import datetime
 colorama.init(autoreset=True)
 
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 model_o1 = "o1-preview"
 model = "chatgpt-4o-latest"
+#model = "gpt-4o-mini"
 
 # ... code commenté pour la configuration alternative ...
 
@@ -557,9 +558,11 @@ The new prompt should remain in English and be placed inside <new_prompt_templat
     return data, prompt_cost, completion_cost
 
 
-def analysGptV2(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
+def analysGptV2(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions,orderbook):
     prompt_template = read_template_from_file("./prompt_template.txt")
-    
+    ## get current date in the format day of the month day of the week month year - hour pm/am minute second
+
+    current_date = datetime.datetime.now().strftime("%d %A %B %Y - %I %p %M %S")
     variables = {
         'data': data,
         'user_balance': user_balance,
@@ -567,7 +570,9 @@ def analysGptV2(data, user_balance, whitelist, technical_data,past_data, active_
         'technical_data': technical_data,
         'past_data': past_data,
         'active_positions': active_positions,
-        'open_positions': open_positions
+        'open_positions': open_positions,
+        'current_date': current_date,
+        'orderbook': orderbook
     }
     message = safe_format(prompt_template, **variables)
     

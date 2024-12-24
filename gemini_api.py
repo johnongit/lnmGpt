@@ -10,16 +10,16 @@ import colorama
 from colorama import Fore, Back, Style
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import time
-
+import datetime
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-model_name="gemini-1.5-pro"
+model="gemini-2.0-flash-exp"
 
 # Create the model
 generation_config = {
   "temperature": 0,
   "top_p": 0.95,
-  "top_k": 64,
+  "top_k": 40,
   "max_output_tokens": 8192,
   "response_mime_type": "text/plain",
 }
@@ -49,8 +49,14 @@ def safe_format(template, **kwargs):
 )
 
 def get_response(text):
+    print(f"{Fore.BLUE}[DEBUG] Starting get_response function{Style.RESET_ALL}")
     full_response = ""
     continue_token = "<CONTINUE>"
+    required_tags = [
+        ("<past_data_analys>", "</past_data_analys>"),
+        ("<technical_analysis>", "</technical_analysis>"),
+        ("<next_trigger>", "</next_trigger>")
+    ]
   
     system_prompt = f'''You are an AI assistant that explains your reasoning step by step, incorporating dynamic Chain of Thought (CoT), reflection, and verbal reinforcement learning. Follow these instructions:
 
@@ -74,8 +80,8 @@ After every 3 steps, perform a detailed self-reflection on your reasoning so far
 
 If your response is incomplete, end it with the token "{continue_token}" to indicate there's more to follow.
 '''
-    model = genai.GenerativeModel(
-      model_name=model_name,
+    model_gen = genai.GenerativeModel(
+      model_name=model,
       generation_config=generation_config,
       system_instruction=system_prompt,
     )
@@ -83,44 +89,66 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
     history = []
     while True:
         try:
-            chat_session = model.start_chat(
+            print(f"{Fore.BLUE}[DEBUG] Starting new chat session iteration{Style.RESET_ALL}")
+            chat_session = model_gen.start_chat(
                   history=history
             )
+            print(f"{Fore.BLUE}[DEBUG] Sending message to model{Style.RESET_ALL}")
             response = chat_session.send_message(text)
 
             assistant_response = response.text
             full_response += assistant_response
+            
+            print(f"{Fore.BLUE}[DEBUG] Response length: {len(assistant_response)} characters{Style.RESET_ALL}")
 
             history.append({
                 "role": "model",
                 "parts": [assistant_response]
             })
 
-            if assistant_response.strip().endswith(continue_token):
-                full_response = full_response.rsplit(continue_token, 1)[0]
+            # Vérifier si la réponse se termine par le continue_token
+            has_continue = assistant_response.strip().endswith(continue_token)
+            print(f"{Fore.BLUE}[DEBUG] Has continue token: {has_continue}{Style.RESET_ALL}")
+            
+            # Vérifier la présence des balises requises
+            needs_continuation = False
+            for start_tag, end_tag in required_tags:
+                if start_tag in text and (
+                    start_tag not in full_response or 
+                    end_tag not in full_response
+                ):
+                    needs_continuation = True
+                    print(f"{Fore.BLUE}[DEBUG] Missing required tags: {start_tag}, {end_tag}{Style.RESET_ALL}")
+                    break
+
+            if has_continue or needs_continuation:
+                print(f"{Fore.BLUE}[DEBUG] Continuing response generation{Style.RESET_ALL}")
+                if has_continue:
+                    full_response = full_response.rsplit(continue_token, 1)[0]
                 history.append({
                     "role": "user",
-                    "parts": [f"{continue_token}"]
+                    "parts": [continue_token]
                 })
-          
+                wait = 30
+                print(f"{Fore.BLUE}[DEBUG] Waiting {wait} seconds before next iteration{Style.RESET_ALL}")
+                time.sleep(wait)
             else:
+                print(f"{Fore.BLUE}[DEBUG] Response complete, exiting loop{Style.RESET_ALL}")
                 break
-            wait=30
-            print(f'Need to continue: sleep for {wait} seconds')
-            time.sleep(wait)
 
         except Exception as e:
+            print(f"{Fore.RED}[DEBUG] Error encountered: {str(e)}{Style.RESET_ALL}")
             import traceback
             trace = traceback.format_exc()
-            print(f"Encountered error: {e}")
+            print(f"{Fore.RED}[DEBUG] Full traceback: {trace}{Style.RESET_ALL}")
             raise
     
+    print(f"{Fore.BLUE}[DEBUG] get_response completed. Total length: {len(full_response)}{Style.RESET_ALL}")
     return full_response
 
 
-
-
 def analyze_price_action_gemini(data_history_short, data_history, data_history_long, technical_data_short, technical_data, technical_data_long):
+    print(f"{Fore.BLUE}[DEBUG] Starting price action analysis{Style.RESET_ALL}")
     message = f'''
     You are a professional stock market analyst specializing in bitcoin and price action analysis. Your task is to thoroughly analyze bitcoin price data, as well as the RSI and MACD technical indicators, to provide a detailed analysis for short, medium, and long term.
 
@@ -186,14 +214,23 @@ To reduce hallucinations, do not invent or provide any metrics or specific numer
     technical_analysis = get_response(message)
     
     print(f"{Fore.GREEN}Analyse Price Action - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{technical_analysis}{Style.RESET_ALL}\n")
-    prompt_cost = calculate_prompt_cost(message, model_name)
-    completion_cost = calculate_completion_cost(technical_analysis, model_name)
+    try:
+        print(f"{Fore.BLUE}[DEBUG] Calculating costs{Style.RESET_ALL}")
+        prompt_cost = calculate_prompt_cost(message, model)
+        completion_cost = calculate_completion_cost(technical_analysis, model)
+
+    except Exception as e:
+        print(f"{Fore.RED}[DEBUG] Error calculating costs: {str(e)}{Style.RESET_ALL}")
+        prompt_cost = 0
+        completion_cost = 0
     print(f"{Fore.CYAN}Coûts - Prompt : {Fore.LIGHTCYAN_EX}{prompt_cost}{Style.RESET_ALL}, Completion : {Fore.LIGHTCYAN_EX}{completion_cost}{Style.RESET_ALL}\n")
     
     
     return technical_analysis, prompt_cost, completion_cost
 
 def analys_past_data_gemini(past_data_short,past_data_medium="", past_data_long=""):
+    print(f"{Fore.BLUE}[DEBUG] Starting past data analysis{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}[DEBUG] Data lengths - Short: {len(str(past_data_short))}, Medium: {len(str(past_data_medium))}, Long: {len(str(past_data_long))}{Style.RESET_ALL}")
     message = f'''
 You are an AI cryptocurrency market analyst specializing in order analysis. Your task is to analyze previous orders executed by other AI Agents in the Bitcoin market across three different time horizons. You will be provided with past order data for short-term, medium-term, and long-term strategies, and you need to give a precise analysis of the successes and failures for each horizon.
 
@@ -261,15 +298,24 @@ Remember, your goal is to provide a precise and insightful analysis of the succe
     past_data_analys = get_response(message)
     print(f"{Fore.GREEN}Analyse des données passées - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{past_data_analys}{Style.RESET_ALL}\n")
     
-    prompt_cost = calculate_prompt_cost(message, model_name)
-    completion_cost = calculate_completion_cost(past_data_analys, model_name)
+    try:
+        print(f"{Fore.BLUE}[DEBUG] Calculating costs{Style.RESET_ALL}")
+        prompt_cost = calculate_prompt_cost(message, model)
+        completion_cost = calculate_completion_cost(past_data_analys, model)
+
+    except Exception as e:
+        print(f"{Fore.RED}[DEBUG] Error calculating costs: {str(e)}{Style.RESET_ALL}")
+        prompt_cost = 0
+        completion_cost = 0
     print(f"{Fore.CYAN}Coûts - Prompt : {prompt_cost}, Completion : {completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
 
 
-def analys_gemini(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
-    prompt_template = read_template_from_file("./prompt_template.txt")
-    
+def analys_gemini(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions,orderbook):
+    print(f"{Fore.BLUE}[DEBUG] Starting final analysis{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}[DEBUG] User balance: {user_balance}, Active positions: {len(active_positions)}, Open positions: {len(open_positions)}{Style.RESET_ALL}")
+    prompt_template = read_template_from_file("./prompt_template_noorderbook.txt")
+    current_date = datetime.datetime.now().strftime("%d %A %B %Y - %I %p %M %S")
     variables = {
         'data': data,
         'user_balance': user_balance,
@@ -277,13 +323,22 @@ def analys_gemini(data, user_balance, whitelist, technical_data,past_data, activ
         'technical_data': technical_data,
         'past_data': past_data,
         'active_positions': active_positions,
-        'open_positions': open_positions
+        'open_positions': open_positions,
+        'current_date': current_date,
+        'orderbook': orderbook
     }
     message = safe_format(prompt_template, **variables)
     
     print(f"{Fore.YELLOW}Analyse finale - Prompt :{Style.RESET_ALL}\n{Fore.LIGHTYELLOW_EX}{message}{Style.RESET_ALL}\n")
     data = get_response(message)
     print(f"{Fore.GREEN}Analyse finale - Réponse :{Style.RESET_ALL}\n{Fore.LIGHTGREEN_EX}{data}{Style.RESET_ALL}\n")
-    prompt_cost = calculate_prompt_cost(message, model_name)
-    completion_cost = calculate_completion_cost(data, model_name)
+    try:
+        print(f"{Fore.BLUE}[DEBUG] Calculating costs{Style.RESET_ALL}")
+        prompt_cost = calculate_prompt_cost(message, model)
+        completion_cost = calculate_completion_cost(data, model)
+
+    except Exception as e:
+        print(f"{Fore.RED}[DEBUG] Error calculating costs: {str(e)}{Style.RESET_ALL}")
+        prompt_cost = 0
+        completion_cost = 0
     return data, prompt_cost, completion_cost

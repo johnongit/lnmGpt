@@ -13,13 +13,14 @@ from anthropic_api import analyze_price_action, analys_past_data, analysClaudeV4
 from openai_api import analyze_price_action_oai, analys_past_data_oai, analysGptV2, analys_o1
 from ollama_api import analys_past_data_ollama, analysOllamaV2, analyze_price_action_ollama
 from gemini_api import analyze_price_action_gemini, analys_past_data_gemini, analys_gemini
+from bitmex_api import get_bitmex_orderbook
 from yahoo_finance_api import YahooFinanceTool
 from history import update_history, find_not_closed_orders, read_order_history, find_closed_orders, update_pl_from_active_positions
 from structured_logger import StructuredLogger
 import pandas as pd
 
 import logging
-print("test")
+
 
 # Add this near the top of the file
 auto_validate = "--auto-validate" in sys.argv
@@ -140,8 +141,36 @@ def main():
         orders_closed_medium = find_closed_orders(history, "medium")
         orders_closed_long = find_closed_orders(history, "long")
 
+        # get orderbook
+        orderbook = get_bitmex_orderbook()
+        print("data_history_short")
+        print(data_history_short)
+        print("data_history")
+        print(data_history)
+        print("data_history_long")
+        print(data_history_long)
+        print("technical_data_short")
+        print(technical_data_short)
+        print("technical_data")
+        print(technical_data)
+        print("technical_data_long")
+        print(technical_data_long)
         
         
+        print("=====================================")
+        print("orders_closed_short")
+        print(orders_closed_short)
+        print("orders_closed_medium")
+        print(orders_closed_medium)
+        print("orders_closed_long")
+        print(orders_closed_long)
+        print("data_history_short")
+        print(data_history_short)
+        print("data_history")
+        print(data_history)
+        print("data_history_long")
+        print(data_history_long)
+
 
         
 
@@ -231,7 +260,8 @@ def main():
                 technical_data=price_data,
                 past_data=history_data,
                 active_positions=active_positions_ids,
-                open_positions=open_positions_ids
+                open_positions=open_positions_ids,
+                orderbook=orderbook  # Add this line
             )
             print(f'Coût du prompt : {p_cost}')
             print(f'Coût de complétion : {c_cost}')
@@ -245,13 +275,13 @@ def main():
             prompt_cost += p_cost
             completion_cost += c_cost
         
-        close_orders, update_orders, create_orders, cancel_orders = parse_analysis_result(analysis_result)
+        close_orders, update_orders, create_orders, cancel_orders, next_trigger = parse_analysis_result(analysis_result)
 
         print(f'Coût total du prompt : {prompt_cost}')
         print(f'Coût total de complétion : {completion_cost}')
         log_info(f"Coût total du prompt : {prompt_cost}")
         log_info(f"Coût total de complétion : {completion_cost}")
-        user_interaction(close_orders, update_orders, create_orders, active_positions_ids, open_positions_ids, cancel_orders, auto_validate)
+        user_interaction(close_orders, update_orders, create_orders, active_positions_ids, open_positions_ids, cancel_orders, auto_validate, next_trigger)
 
     except Exception as e:
         logger.log_error(e, {"traceback": traceback.format_exc()})

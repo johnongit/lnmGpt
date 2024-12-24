@@ -11,48 +11,10 @@ Each expert will analyze the data from their perspective and contribute to the f
 
 ## MANDATORY PORTFOLIO ALLOCATION REQUIREMENTS 
 1. Long-term positions (15+ days): MINIMUM 20% allocation
-   - Must survive 15-20% price swings
-   - Minimum hold time: 21 days
-   - Stop loss: 15-20% from entry minimum
-   - Take profit: 40-50% minimum in bull market
-   - Weekly timeframe analysis only
-2. Medium-term positions (4-14 days): Up to 40% allocation
-   - Must survive 10-15% price swings
-   - Stop loss: 10-15% from entry
-   - Take profit: 20-30% target
+2. Medium-term positions (4-14 days): Up to 40% allocation  
 3. Short-term positions (1-3 days): Up to 40% allocation
-   - Standard volatility management
-   - Stop loss: 5-8% from entry
-   - Take profit: 10-15% target
 
 Each timeframe MUST be represented in final recommendations unless specific market conditions prevent it (must be explicitly justified).
-
-## VOLATILITY MANAGEMENT RULES
-
-### Bitcoin-Specific Volatility Considerations
-1. Daily Movement Range:
-   - Normal volatility: \$2,000-\$4,000
-   - High volatility: \$4,000-\$8,000
-   - Extreme volatility: \$8,000+
-
-2. Position Management by Timeframe:
-   - Long-term:
-     * Must survive \$15,000-\$20,000 swings
-     * No SL modification first 21 days
-     * Evaluate on weekly closes only
-   - Medium-term:
-     * Must survive \$8,000-\$12,000 swings
-     * No SL modification first 7 days
-   - Short-term:
-     * Must survive \$3,000-\$5,000 swings
-     * Standard SL management
-
-3. Bull Market Specific Rules:
-   - Long-term TP: Minimum +40-50% from entry
-   - Medium-term TP: Minimum +20-30% from entry
-   - Short-term TP: Minimum +10-15% from entry
-   - Use lower leverage (2-3x for long-term)
-   - Wider stops to avoid shakeouts
 
 ---
 
@@ -123,16 +85,6 @@ Each timeframe MUST be represented in final recommendations unless specific mark
 ```
 
 - **Description**: Current market technical indicators, including price trends, support/resistance levels, RSI, MACD, and other relevant data.
-
-#### **OrderBook Data**
-
-```xml
-<orderbook>
-{orderbook}
-</orderbook>
-```
-
-- **Description**: Current order book data, including bid and ask prices, order sizes, and market depth.
 
 #### **Past Performance Data**
 
@@ -213,14 +165,6 @@ Each timeframe MUST be represented in final recommendations unless specific mark
     * Above major support levels
   - MUST provide explicit range analysis for each new position
 
-  - **OrderBook Analysis Requirements**:
-    * Analyze order book depth and liquidity
-    * Identify significant buy/sell walls
-    * Calculate buy/sell ratio at different price levels
-    * Use order book data to validate support/resistance levels
-    * Consider order book imbalances in entry/exit decisions
-    * Monitor large orders that could impact price
-    * Identify potential stop-loss clusters
 
 ### **2. Order Analyst**
 
@@ -761,18 +705,6 @@ Provide your recommendations in JSON format within the specified XML tags. Use t
   - Long term: Minimum 12% from entry price
   - Consider weekly support/resistance levels rather than just daily levels
 
-18. **OrderBook Considerations**:
-   - Validate support/resistance levels against order book depth
-   - Place orders away from large stop-loss clusters
-   - Consider liquidity at target entry/exit prices
-   - Factor in order book imbalances for position sizing
-   - Monitor significant buy/sell walls for potential price impacts
-   - Use order book data to:
-     * Confirm technical levels
-     * Identify potential price barriers
-     * Gauge market sentiment
-     * Validate stop-loss placement
-     * Optimize entry/exit points
 ---
 
 ## **Additional Notes**

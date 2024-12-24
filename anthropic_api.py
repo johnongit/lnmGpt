@@ -8,9 +8,12 @@ import re
 import colorama
 from colorama import Fore, Back, Style
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-
+import os
+import time
+import datetime
 colorama.init(autoreset=True)
 
+#model = "claude-3-5-haiku-20241022"
 model = "claude-3-5-sonnet-20241022"
 
 api_key = os.getenv("ANTRHOPIC_API_KEY")
@@ -95,7 +98,7 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
                 model=model,
                 system=system_prompt,
                 max_tokens=8192,
-                temperature=0,
+                temperature=0.3,
                 messages=messages
             )
 
@@ -244,15 +247,18 @@ Remember, your goal is to provide a precise and insightful analysis of the succe
         prompt_cost = calculate_prompt_cost(message, model)
         completion_cost = calculate_completion_cost(past_data_analys, model)
 
-    except ValueError as e:
+    except Exception as e:
         prompt_cost = 0
         completion_cost = 0
     print(f"{Fore.CYAN}Coûts - Prompt : {prompt_cost}, Completion : {completion_cost}{Style.RESET_ALL}\n")
     return past_data_analys, prompt_cost, completion_cost
 
 
-def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions):
-    prompt_template = read_template_from_file("./prompt_template.txt")
+def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, active_positions, open_positions,orderbook):
+    prompt_template = read_template_from_file("./prompt_template_noorderbook.txt")
+    ## get current date in the format day of the month day of the week month year - hour pm/am minute second
+
+    current_date = datetime.datetime.now().strftime("%d %A %B %Y - %I %p %M %S")
     variables = {
         'data': data,
         'user_balance': user_balance,
@@ -260,7 +266,9 @@ def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, acti
         'technical_data': technical_data,
         'past_data': past_data,
         'active_positions': active_positions,
-        'open_positions': open_positions
+        'open_positions': open_positions,
+        'current_date': current_date,
+        'orderbook': orderbook
     }
     message = safe_format(prompt_template, **variables)
     
@@ -271,7 +279,7 @@ def analysClaudeV4(data, user_balance, whitelist, technical_data,past_data, acti
         prompt_cost = calculate_prompt_cost(message, model)
         completion_cost = calculate_completion_cost(data, model)
 
-    except ValueError as e:
+    except Exception as e:
         prompt_cost = 0
         completion_cost = 0
 
@@ -353,7 +361,7 @@ To reduce hallucinations, do not invent or provide any metrics or specific numer
         prompt_cost = calculate_prompt_cost(message, model)
         completion_cost = calculate_completion_cost(technical_analysis, model)
 
-    except ValueError as e:
+    except Exception as e:
         prompt_cost = 0
         completion_cost = 0
 
@@ -361,4 +369,5 @@ To reduce hallucinations, do not invent or provide any metrics or specific numer
     
     
     return technical_analysis, prompt_cost, completion_cost
+
 

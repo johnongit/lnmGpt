@@ -12,10 +12,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 colorama.init(autoreset=True)
 
 client = OpenAI(
-    base_url = 'http://localhost:4000/',
+    base_url = 'http://localhost:11434/v1',
     api_key='your_secret_key', # required, but unused
 )
-model='gemini-pro'
+model='qwq:latest'
 
 
 def read_template_from_file(file_path):
@@ -44,6 +44,7 @@ def safe_format(template, **kwargs):
 )
 
 def get_response(text):
+    print(f"{Fore.CYAN}[DEBUG] Starting get_response with text length: {len(text)}{Style.RESET_ALL}")
     full_response = ""
     continue_token = "<CONTINUE>"
   
@@ -72,18 +73,24 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
 
 
     messages = [
-      {
-          "role": "system",
-          "content": system_prompt
-      },
-      {
-          "role": "user",
-          "content": text
-      }
+        {
+            "role": "system",
+            "content": system_prompt
+        },
+        {
+            "role": "user",
+            "content": text
+        }
     ]
 
+    print(f"{Fore.CYAN}[DEBUG] Initial messages setup complete{Style.RESET_ALL}")
+    iteration = 0
+
     while True:
+        iteration += 1
+        print(f"{Fore.CYAN}[DEBUG] Starting iteration {iteration}{Style.RESET_ALL}")
         try:
+            print(f"{Fore.CYAN}[DEBUG] Making API call...{Style.RESET_ALL}")
             message = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -98,6 +105,7 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
             )
 
             assistant_response = message.choices[0].message.content
+            print(f"{Fore.CYAN}[DEBUG] Received response of length: {len(assistant_response)}{Style.RESET_ALL}")
             full_response += assistant_response
 
             messages.append({
@@ -106,18 +114,21 @@ If your response is incomplete, end it with the token "{continue_token}" to indi
             })
 
             if assistant_response.strip().endswith(continue_token):
+                print(f"{Fore.CYAN}[DEBUG] Continue token detected, preparing for next iteration{Style.RESET_ALL}")
                 full_response = full_response.rsplit(continue_token, 1)[0]
                 messages.append({
                     "role": "user",
                     "content": f"{continue_token}"
                 })
             else:
+                print(f"{Fore.CYAN}[DEBUG] Response complete, exiting loop{Style.RESET_ALL}")
                 break
 
         except Exception as e:
-            print(f"Encountered error: {e}")
+            print(f"{Fore.RED}[DEBUG] Error encountered: {type(e).__name__}: {str(e)}{Style.RESET_ALL}")
             raise
     
+    print(f"{Fore.CYAN}[DEBUG] get_response completed. Total iterations: {iteration}, Final response length: {len(full_response)}{Style.RESET_ALL}")
     return full_response
 
 

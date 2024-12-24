@@ -50,6 +50,7 @@ def parse_analysis_result(analysis_result):
     order_to_update = re.findall(r'<order_to_update>(.*?)</order_to_update>', analysis_result, re.DOTALL)
     order_to_create = re.findall(r'<order_to_create>(.*?)</order_to_create>', analysis_result, re.DOTALL)
     order_to_cancel = re.findall(r'<order_to_cancel>(.*?)</order_to_cancel>', analysis_result, re.DOTALL)
+    next_trigger = re.findall(r'<next_trigger>(.*)</next_trigger>', analysis_result, re.DOTALL)
         
 
     # Fonction pour parser le JSON dans chaque section
@@ -61,6 +62,7 @@ def parse_analysis_result(analysis_result):
     update_orders = parse_json(order_to_update)
     create_orders = parse_json(order_to_create)
     cancel_orders = parse_json(order_to_cancel)
+    next_trigger = parse_json(next_trigger)
 
-    return close_orders, update_orders, create_orders, cancel_orders
+    return close_orders, update_orders, create_orders, cancel_orders, next_trigger
 

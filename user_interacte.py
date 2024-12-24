@@ -22,7 +22,7 @@ LNM_OPTIONS = {
 lnm = rest.LNMarketsRest(**LNM_OPTIONS)
 
 
-def user_interaction(close_orders, update_orders, create_orders, active_positions, open_positions, cancel_orders, auto_validate=False):
+def user_interaction(close_orders, update_orders, create_orders, active_positions, open_positions, cancel_orders, auto_validate=False, next_trigger=None):
     print("\nRecommandations d'actions :")
 
     # Fermeture d'ordres
@@ -131,8 +131,28 @@ def user_interaction(close_orders, update_orders, create_orders, active_position
                 else:
                     print(f"Erreur lors de la mise à jour de l'ordre {order['id']}.")
 
-
-
+    # Add next trigger display at the end
+    if next_trigger:
+        print("\n===============================")
+        print("\nRecommandation pour la prochaine exécution:")
+        print(f"Type de déclenchement: {next_trigger['type']}")
+        
+        if "date" in next_trigger:
+            next_date = datetime.strptime(next_trigger['date'], '%Y-%m-%d %H:%M:%S')
+            current_date = datetime.now()
+            min_next_date = current_date + timedelta(days=1)
+            
+            if next_date < min_next_date:
+                next_date = min_next_date
+                print(f"Date ajustée pour respecter l'intervalle minimum de 24h: {next_date.strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                print(f"Date: {next_trigger['date']}")
+                
+        if "price_target" in next_trigger:
+            print(f"Cible de prix: {next_trigger['price_target']['price']} ({next_trigger['price_target']['direction']})")
+            print(f"Raison du prix cible: {next_trigger['price_target']['reason']}")
+            
+        print(f"Raison générale: {next_trigger['reason']}")
 
 # Fonctions pour interagir avec l'API LN Markets
 def close_order(order_id, reason):
